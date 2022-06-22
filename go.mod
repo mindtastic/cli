@@ -1,4 +1,4 @@
-module cli.go
+module github.com/mindtastic/cli
 
 go 1.18
 
