@@ -50,21 +50,15 @@ type APIClient struct {
 
 	// API Services
 
-	AdminApi *AdminApiService
-
 	AuthenticationApi *AuthenticationApiService
 
 	MoodDiaryServiceApi *MoodDiaryServiceApiService
 
 	MotivatorServiceApi *MotivatorServiceApiService
 
-	NotificationServiceApi *NotificationServiceApiService
-
 	TiltServiceApi *TiltServiceApiService
 
 	UserServiceApi *UserServiceApiService
-
-	WikiServiceApi *WikiServiceApiService
 }
 
 type service struct {
@@ -83,14 +77,11 @@ func NewAPIClient(cfg *Configuration) *APIClient {
 	c.common.client = c
 
 	// API Services
-	c.AdminApi = (*AdminApiService)(&c.common)
 	c.AuthenticationApi = (*AuthenticationApiService)(&c.common)
 	c.MoodDiaryServiceApi = (*MoodDiaryServiceApiService)(&c.common)
 	c.MotivatorServiceApi = (*MotivatorServiceApiService)(&c.common)
-	c.NotificationServiceApi = (*NotificationServiceApiService)(&c.common)
 	c.TiltServiceApi = (*TiltServiceApiService)(&c.common)
 	c.UserServiceApi = (*UserServiceApiService)(&c.common)
-	c.WikiServiceApi = (*WikiServiceApiService)(&c.common)
 
 	return c
 }

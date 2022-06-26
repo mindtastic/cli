@@ -79,10 +79,6 @@ All URIs are relative to *https://echo.api.live.mindtastic.lol*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
-*AdminApi* | [**AdminCreateUser**](docs/AdminApi.md#admincreateuser) | **Post** /users/admin | Create user.
-*AdminApi* | [**AdminGetUser**](docs/AdminApi.md#admingetuser) | **Get** /users/admin | Get all users.
-*AdminApi* | [**DeleteWiki**](docs/AdminApi.md#deletewiki) | **Delete** /wiki/{wikiEntryId}/admin | Delete wiki entry by id.
-*AdminApi* | [**PostWiki**](docs/AdminApi.md#postwiki) | **Post** /wiki/admin | Add new wiki entries
 *AuthenticationApi* | [**InitUserLogin**](docs/AuthenticationApi.md#inituserlogin) | **Get** /self-service/login/api | 
 *AuthenticationApi* | [**InitUserRegistration**](docs/AuthenticationApi.md#inituserregistration) | **Get** /self-service/registration/api | Initate registration flow
 *AuthenticationApi* | [**SubmitUserLogin**](docs/AuthenticationApi.md#submituserlogin) | **Post** /self-service/login | 
@@ -98,9 +94,6 @@ Class | Method | HTTP request | Description
 *MotivatorServiceApi* | [**PostMotivatorUserId**](docs/MotivatorServiceApi.md#postmotivatoruserid) | **Post** /motivator | Add motivator to user&#39;s motivators.
 *MotivatorServiceApi* | [**PostMotivatorUserIdFeedbackMotivatorId**](docs/MotivatorServiceApi.md#postmotivatoruseridfeedbackmotivatorid) | **Post** /motivator/result/{motivatorId} | Add a new result to user&#39;s current motivator.
 *MotivatorServiceApi* | [**SafetyNetPost**](docs/MotivatorServiceApi.md#safetynetpost) | **Post** /safetyNet | Add safety net item to currently authenticated user safety net.
-*NotificationServiceApi* | [**DeleteNotificationUserId**](docs/NotificationServiceApi.md#deletenotificationuserid) | **Delete** /notification | Delete notification for user by id.
-*NotificationServiceApi* | [**GetNotificationUserId**](docs/NotificationServiceApi.md#getnotificationuserid) | **Get** /notification | Get notifications for user by id.
-*NotificationServiceApi* | [**PostNotificationUserId**](docs/NotificationServiceApi.md#postnotificationuserid) | **Post** /notification | Set notification for user by id.
 *TiltServiceApi* | [**GetTilt**](docs/TiltServiceApi.md#gettilt) | **Get** /tilt | Get tilt document.
 *TiltServiceApi* | [**PostTilt**](docs/TiltServiceApi.md#posttilt) | **Post** /tilt | Set tilt document.
 *UserServiceApi* | [**AdminCreateUser**](docs/UserServiceApi.md#admincreateuser) | **Post** /users/admin | Create user.
@@ -111,27 +104,18 @@ Class | Method | HTTP request | Description
 *UserServiceApi* | [**GetUserSettings**](docs/UserServiceApi.md#getusersettings) | **Get** /user/settings | Get settings of the currently logged in user
 *UserServiceApi* | [**PutUserData**](docs/UserServiceApi.md#putuserdata) | **Put** /user | Update currently logged in user
 *UserServiceApi* | [**SetUserSettings**](docs/UserServiceApi.md#setusersettings) | **Post** /user/settings | Set current user&#39;s settings.
-*WikiServiceApi* | [**DeleteWiki**](docs/WikiServiceApi.md#deletewiki) | **Delete** /wiki/{wikiEntryId}/admin | Delete wiki entry by id.
-*WikiServiceApi* | [**GetWiki**](docs/WikiServiceApi.md#getwiki) | **Get** /wiki | Get all available wiki entries
-*WikiServiceApi* | [**PostWiki**](docs/WikiServiceApi.md#postwiki) | **Post** /wiki/admin | Add new wiki entries
-*WikiServiceApi* | [**WikiWikiEntryIdGet**](docs/WikiServiceApi.md#wikiwikientryidget) | **Get** /wiki/{wikiEntryId} | Fetch single wiki entry
 
 
 ## Documentation For Models
 
- - [Entry](docs/Entry.md)
- - [EntryContentInner](docs/EntryContentInner.md)
  - [GenericError](docs/GenericError.md)
- - [GenericError1](docs/GenericError1.md)
  - [GetMotivatorUserId200ResponseInner](docs/GetMotivatorUserId200ResponseInner.md)
  - [IdentityCredentialsType](docs/IdentityCredentialsType.md)
- - [InsertionResponse](docs/InsertionResponse.md)
  - [JsonError](docs/JsonError.md)
  - [Mood](docs/Mood.md)
  - [Motivator](docs/Motivator.md)
  - [MotivatorMediaContentsInner](docs/MotivatorMediaContentsInner.md)
  - [MotivatorResult](docs/MotivatorResult.md)
- - [Notification](docs/Notification.md)
  - [RegistrationWithFlowIdResponse](docs/RegistrationWithFlowIdResponse.md)
  - [SafetyNetItem](docs/SafetyNetItem.md)
  - [SafetyNetItemFeedback](docs/SafetyNetItemFeedback.md)

@@ -208,7 +208,6 @@ paths:
         required: true
         schema:
           type: string
-        style: form
       responses:
         "200":
           content:
@@ -220,11 +219,11 @@ paths:
           description: Returns the after login redirection url when a browser flow
             got submitted.
         "400":
+          description: Bad Request
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/selfServiceLoginFlow'
-          description: Bad Request
         "410":
           content:
             application/json:
@@ -232,11 +231,11 @@ paths:
                 $ref: '#/components/schemas/jsonError'
           description: Internal server error
         "422":
+          description: Unprocessable entity
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/selfServiceBrowserLocationChangeRequiredError'
-          description: Unprocessable entity
         "500":
           content:
             application/json:
@@ -427,6 +426,7 @@ paths:
       summary: Get all users.
       tags:
       - user-service
+      # - admin
       x-accepts: application/json
     post:
       description: Create a user.
@@ -450,6 +450,7 @@ paths:
       summary: Create user.
       tags:
       - user-service
+      # - admin
       x-contentType: application/json
     servers:
     - url: "https://users.api.{environment}.mindtastic.lol"
@@ -657,13 +658,11 @@ paths:
       operationId: delete-motivator-userId-result-motivatorId
       parameters:
       - description: The ID of the motivator to fetch users results
-        explode: false
         in: path
         name: motivatorId
         required: true
         schema:
           type: integer
-        style: simple
       responses:
         "200":
           description: OK
@@ -679,13 +678,11 @@ paths:
       operationId: post-motivator-userId-feedback-motivatorId
       parameters:
       - description: The ID of the motivator to fetch users results
-        explode: false
         in: path
         name: motivatorId
         required: true
         schema:
           type: integer
-        style: simple
       requestBody:
         content:
           application/json:
@@ -712,6 +709,75 @@ paths:
           - live
           - stage
           - dev
+  # /notification:
+  #   delete:
+  #     description: Delete notification for user by id.
+  #     operationId: delete-notification-userId
+  #     responses:
+  #       "200":
+  #         description: OK
+  #       "401":
+  #         description: Unauthorized
+  #       "500":
+  #         description: Internal Server Error
+  #     security:
+  #     - jwt: []
+  #     servers:
+  #     - url: "https://internetwache.api.{environment}.mindtastic.lol"
+  #       variables:
+  #         environment:
+  #           default: live
+  #           enum:
+  #           - live
+  #           - stage
+  #           - dev
+  #     summary: Delete notification for user by id.
+  #     tags:
+  #     - notification-service
+  #   get:
+  #     description: Get notifications for user by id.
+  #     operationId: get-notification-userId
+  #     responses:
+  #       "200":
+  #         content:
+  #           application/json:
+  #             schema:
+  #               items:
+  #                 $ref: '#/components/schemas/notification'
+  #               type: array
+  #         description: OK
+  #       "401":
+  #         description: Unauthorized
+  #       "500":
+  #         description: Internal Server Error
+  #     security:
+  #     - jwt: []
+  #     summary: Get notifications for user by id.
+  #     tags:
+  #     - notification-service
+  #   post:
+  #     description: Set notification for user by id.
+  #     operationId: post-notification-userId
+  #     requestBody:
+  #       content:
+  #         application/json:
+  #           schema:
+  #             $ref: '#/components/schemas/notification'
+  #       description: ""
+  #     responses:
+  #       "200":
+  #         description: OK
+  #       "201":
+  #         description: Created
+  #       "401":
+  #         description: Unauthorized
+  #       "500":
+  #         description: Internal Server Error
+  #     security:
+  #     - jwt: []
+  #     summary: Set notification for user by id.
+  #     tags:
+  #     - notification-service
   /tilt:
     get:
       description: "Get tilt document, i.e. a machine-readable privacy policy."
@@ -762,6 +828,142 @@ paths:
           - live
           - stage
           - dev
+  # /wiki:
+  #   get:
+  #     operationId: get-wiki
+  #     responses:
+  #       "200":
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/entryList'
+  #         description: OK
+  #       "500":
+  #         description: Internal Server Error
+  #     servers:
+  #     - url: "https://wiki.api.{environment}.mindtastic.lol"
+  #       variables:
+  #         environment:
+  #           default: live
+  #           enum:
+  #           - live
+  #           - stage
+  #           - dev
+  #     summary: Get all available wiki entries
+  #     tags:
+  #     - wiki-service
+  #     x-accepts: application/json
+  # /wiki/{wikiEntryId}:
+  #   get:
+  #     parameters:
+  #     - description: ID of a wiki entry
+  #       in: path
+  #       name: wikiEntryId
+  #       required: true
+  #       schema:
+  #         type: string
+  #       style: form
+  #     responses:
+  #       "200":
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/entry'
+  #         description: OK
+  #       "404":
+  #         description: Not found
+  #       "500":
+  #         description: Internal Server Error
+  #     servers:
+  #     - url: "https://wiki.api.{environment}.mindtastic.lol"
+  #       variables:
+  #         environment:
+  #           default: live
+  #           enum:
+  #           - live
+  #           - stage
+  #           - dev
+  #     summary: Fetch single wiki entry
+  #     tags:
+  #     - wiki-service
+  #     x-accepts: application/json
+  # # /wiki/admin:
+  #   post:
+  #     description: Add wiki entries
+  #     operationId: post-wiki
+  #     requestBody:
+  #       content:
+  #         application/json:
+  #           schema:
+  #             $ref: '#/components/schemas/entryList'
+  #     responses:
+  #       "201":
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/insertionResponse'
+  #         description: Created
+  #       "400":
+  #         description: Bad Request
+  #       "401":
+  #         description: Unauthorized
+  #       "500":
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/genericError_1'
+  #         description: Internal server error
+  #     servers:
+  #     - url: "https://wiki.api.{environment}.mindtastic.lol"
+  #       variables:
+  #         environment:
+  #           default: live
+  #           enum:
+  #           - live
+  #           - stage
+  #           - dev
+  #     summary: Add new wiki entries
+  #     tags:
+  #     - wiki-service
+  #     - admin
+  #     x-tira: false
+  #     x-accepts: application/json
+  #     x-contentType: application/json
+  # /wiki/{wikiEntryId}/admin:
+  #   delete:
+  #     operationId: delete-wiki
+  #     parameters:
+  #     - description: ID of a wiki entry
+  #       in: path
+  #       name: wikiEntryId
+  #       required: true
+  #       schema:
+  #         type: string
+  #       style: form
+  #     responses:
+  #       "200":
+  #         description: OK
+  #       "401":
+  #         description: unauthorized
+  #       "500":
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/genericError_1'
+  #         description: Internal server error
+  #     servers:
+  #     - url: "https://wiki.api.{environment}.mindtastic.lol"
+  #       variables:
+  #         environment:
+  #           default: live
+  #           enum:
+  #           - live
+  #           - stage
+  #           - dev
+  #     summary: Delete wiki entry by id.
+  #     tags:
+  #     - wiki-service
+  #     - admin
 components:
   headers: {}
   parameters:
@@ -1650,8 +1852,87 @@ components:
           type: array
       title: motivatorResult
       type: object
+    # notification:
+    #   example:
+    #     ? ""
+    #     : ""
+    #     id: id
+    #     title: title
+    #     ttl: 2000-01-23T04:56:07.000+00:00
+    #     content: content
+    #     timestamp: 2000-01-23T04:56:07.000+00:00
+    #   properties:
+    #     id:
+    #       type: string
+    #     title:
+    #       type: string
+    #     content:
+    #       type: string
+    #     timestamp:
+    #       format: date-time
+    #       type: string
+    #     ttl:
+    #       description: "time to live (i.e., not relevant anymore at specified time)"
+    #       format: date-time
+    #       type: string
+    #     ? ""
+    #     : type: string
+    #   title: notification
+    #   type: object
     tilt:
       type: object
+    # entryList:
+    #   items:
+    #     $ref: '#/components/schemas/entry'
+    #   title: Wiki Entry List
+    #   type: array
+    # entry:
+    #   example:
+    #     title: title
+    #     content:
+    #     - null
+    #     - null
+    #   properties:
+    #     title:
+    #       type: string
+    #     content:
+    #       items:
+    #         $ref: '#/components/schemas/entry_content_inner'
+    #       type: array
+    #   title: Wiki Entry
+    #   type: object
+    # insertionResponse:
+    #   example:
+    #     status_code: 201
+    #     success: true
+    #     insertCount: 2
+    #   properties:
+    #     status_code:
+    #       description: The HTTP status code of the response
+    #       type: integer
+    #     success:
+    #       description: True if all provided wiki entries have been inserted successfully
+    #         into the database
+    #       type: boolean
+    #     insertedCount:
+    #       description: The number of inserted wiki entries on the operation
+    #       type: integer
+    #   title: Wiki Insertion Response
+    #   type: object
+    # genericError_1:
+    #   example:
+    #     status_code: 500
+    #     error: "Could not delete existing articles, so insertion could not be done.\
+    #       \ Please try again"
+    #   properties:
+    #     status_code:
+    #       description: The HTTP status code of the reponse
+    #       type: integer
+    #     error:
+    #       description: Error message
+    #       type: string
+    #   title: Wiki API Generic Error
+    #   type: object
     User_update_object:
       properties:
         email:
@@ -1682,6 +1963,10 @@ components:
           format: uri
           type: string
       type: object
+    # entry_content_inner:
+    #   oneOf:
+    #   - type: string
+    #   - type: object
   securitySchemes:
     jwt:
       bearerFormat: JWT

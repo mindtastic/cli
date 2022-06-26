@@ -126,74 +126,6 @@ func NewConfiguration() *Configuration {
 			},
 		},
 		OperationServers: map[string]ServerConfigurations{
-			"AdminApiService.AdminCreateUser": {
-				{
-					URL: "https://users.api.{environment}.mindtastic.lol",
-					Description: "No description provided",
-					Variables: map[string]ServerVariable{
-						"environment": ServerVariable{
-							Description: "No description provided",
-							DefaultValue: "live",
-							EnumValues: []string{
-								"live",
-								"stage",
-								"dev",
-							},
-						},
-					},
-				},
-			},
-			"AdminApiService.AdminGetUser": {
-				{
-					URL: "https://users.api.{environment}.mindtastic.lol",
-					Description: "No description provided",
-					Variables: map[string]ServerVariable{
-						"environment": ServerVariable{
-							Description: "No description provided",
-							DefaultValue: "live",
-							EnumValues: []string{
-								"live",
-								"stage",
-								"dev",
-							},
-						},
-					},
-				},
-			},
-			"AdminApiService.DeleteWiki": {
-				{
-					URL: "https://wiki.api.{environment}.mindtastic.lol",
-					Description: "No description provided",
-					Variables: map[string]ServerVariable{
-						"environment": ServerVariable{
-							Description: "No description provided",
-							DefaultValue: "live",
-							EnumValues: []string{
-								"live",
-								"stage",
-								"dev",
-							},
-						},
-					},
-				},
-			},
-			"AdminApiService.PostWiki": {
-				{
-					URL: "https://wiki.api.{environment}.mindtastic.lol",
-					Description: "No description provided",
-					Variables: map[string]ServerVariable{
-						"environment": ServerVariable{
-							Description: "No description provided",
-							DefaultValue: "live",
-							EnumValues: []string{
-								"live",
-								"stage",
-								"dev",
-							},
-						},
-					},
-				},
-			},
 			"AuthenticationApiService.InitUserLogin": {
 				{
 					URL: "https://auth.api.{environment}.mindtastic.lol",
@@ -449,23 +381,6 @@ func NewConfiguration() *Configuration {
 					},
 				},
 			},
-			"NotificationServiceApiService.DeleteNotificationUserId": {
-				{
-					URL: "https://internetwache.api.{environment}.mindtastic.lol",
-					Description: "No description provided",
-					Variables: map[string]ServerVariable{
-						"environment": ServerVariable{
-							Description: "No description provided",
-							DefaultValue: "live",
-							EnumValues: []string{
-								"live",
-								"stage",
-								"dev",
-							},
-						},
-					},
-				},
-			},
 			"TiltServiceApiService.GetTilt": {
 				{
 					URL: "https://tilt.api.{environment}.mindtastic.lol",
@@ -622,74 +537,6 @@ func NewConfiguration() *Configuration {
 			"UserServiceApiService.SetUserSettings": {
 				{
 					URL: "https://users.api.{environment}.mindtastic.lol",
-					Description: "No description provided",
-					Variables: map[string]ServerVariable{
-						"environment": ServerVariable{
-							Description: "No description provided",
-							DefaultValue: "live",
-							EnumValues: []string{
-								"live",
-								"stage",
-								"dev",
-							},
-						},
-					},
-				},
-			},
-			"WikiServiceApiService.DeleteWiki": {
-				{
-					URL: "https://wiki.api.{environment}.mindtastic.lol",
-					Description: "No description provided",
-					Variables: map[string]ServerVariable{
-						"environment": ServerVariable{
-							Description: "No description provided",
-							DefaultValue: "live",
-							EnumValues: []string{
-								"live",
-								"stage",
-								"dev",
-							},
-						},
-					},
-				},
-			},
-			"WikiServiceApiService.GetWiki": {
-				{
-					URL: "https://wiki.api.{environment}.mindtastic.lol",
-					Description: "No description provided",
-					Variables: map[string]ServerVariable{
-						"environment": ServerVariable{
-							Description: "No description provided",
-							DefaultValue: "live",
-							EnumValues: []string{
-								"live",
-								"stage",
-								"dev",
-							},
-						},
-					},
-				},
-			},
-			"WikiServiceApiService.PostWiki": {
-				{
-					URL: "https://wiki.api.{environment}.mindtastic.lol",
-					Description: "No description provided",
-					Variables: map[string]ServerVariable{
-						"environment": ServerVariable{
-							Description: "No description provided",
-							DefaultValue: "live",
-							EnumValues: []string{
-								"live",
-								"stage",
-								"dev",
-							},
-						},
-					},
-				},
-			},
-			"WikiServiceApiService.WikiWikiEntryIdGet": {
-				{
-					URL: "https://wiki.api.{environment}.mindtastic.lol",
 					Description: "No description provided",
 					Variables: map[string]ServerVariable{
 						"environment": ServerVariable{
