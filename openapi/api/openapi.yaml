@@ -1,0 +1,1690 @@
+openapi: 3.0.3
+info:
+  contact:
+    email: mail@kopfsachen.org
+    name: Kopfsachen e. V.
+    url: https://www.kopfsachen.org
+  description: Kopfsachen e. V. is an association for the promotion of young people's
+    mental health. The goal is to teach the basics of mental health literacy in various
+    educational formats.
+  title: Kopfsachen
+  version: "0.2"
+servers:
+- description: Development API for testing purposes
+  url: "https://{service}.api.{environment}.mindtastic.lol"
+  variables:
+    service:
+      default: echo
+      description: The requests gets routed to the individual microservice by pattern
+        matching the requests Host header
+    environment:
+      default: live
+      description: Choose the environment to work on.
+      enum:
+      - live
+      - stage
+      - dev
+tags:
+- name: user-service
+- name: notification-service
+- name: mood-diary-service
+- name: motivator-service
+- name: wiki-service
+- name: administration-service
+- name: tilt-service
+- description: "The authentication API is based on the ORY Kratos HTTP API, but with\
+    \ some additional tweaks. See [Kratos Docs](https://www.ory.sh/docs/kratos/reference/api)\
+    \ and [Mindtastic Docs](github.com/mindtastic/bouncer/wiki) for more information."
+  name: authentication
+paths:
+  /self-service/registration/api:
+    get:
+      operationId: init-user-registration
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/selfServiceRegistrationFlow'
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Bad request
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Internal server error
+      servers:
+      - url: "https://auth.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: Initate registration flow
+      tags:
+      - authentication
+  /self-service/registration:
+    post:
+      operationId: submit-user-registration
+      parameters:
+      - description: The Registration flow ID as an URL Query parameters
+        explode: true
+        in: query
+        name: flow
+        required: true
+        schema:
+          type: string
+        style: form
+      - description: "When using the browser flow, the HTTP cookie (encodes session\
+          \ and CSRF token) must be present"
+        explode: false
+        in: header
+        name: Cookie
+        required: false
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registration-with-flow-id-response'
+          description: OK. Registration successful.
+        "303":
+          description: Returns the after auto-login redirection url when a browser
+            flow got submitted.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/selfServiceRegistrationFlow'
+          description: Bad requests. API returns a new or already created authflow.
+        "410":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Gone. The appropriate auth flow expired before submitting.
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/selfServiceBrowserLocationChangeRequiredError'
+          description: The webbrowser is in a browser flow and needs to change its
+            location before submitting.
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Internal server error
+      servers:
+      - url: "https://auth.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: Complete registration flow
+      tags:
+      - authentication
+      x-accepts: application/json
+      x-contentType: application/json
+  /self-service/login/api:
+    get:
+      description: This endpoint initiates a login flow for API clients that do not
+        use a browser.
+      operationId: init-user-login
+      parameters:
+      - description: "Refresh a login.\n\nIf set to true, this will refresh an existing\
+          \ login session by\nasking the user to sign in again. This will reset the\n\
+          authenticated_at time of the session."
+        explode: true
+        in: query
+        name: refresh
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: The Session token of the Session performing the flow. Required
+          when using the refresh parameter
+        explode: false
+        in: header
+        name: X-Session-Token
+        required: false
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/selfServiceLoginFlow'
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Bad request
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Internal Service Error
+      servers:
+      - url: "https://auth.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      tags:
+      - authentication
+      x-accepts: application/json
+  /self-service/login:
+    post:
+      operationId: submit-user-login
+      parameters:
+      - description: The Login flow ID as an URL Query parameters
+        explode: true
+        in: query
+        name: flow
+        required: true
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/session'
+          description: OK.
+        "303":
+          description: Returns the after login redirection url when a browser flow
+            got submitted.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/selfServiceLoginFlow'
+          description: Bad Request
+        "410":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Internal server error
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/selfServiceBrowserLocationChangeRequiredError'
+          description: Unprocessable entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Internal server error
+      servers:
+      - url: "https://auth.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      tags:
+      - authentication
+      x-accepts: application/json
+      x-contentType: application/json
+  /self-service/logout:
+    delete:
+      operationId: user-logout
+      responses:
+        "200":
+          description: OK
+        "500":
+          description: Internal Service Error
+      servers:
+      - url: "https://auth.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      tags:
+      - authentication
+  /user:
+    delete:
+      operationId: delete-user-data
+      responses:
+        "200":
+          description: OK
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Delete the currently logged in user
+      tags:
+      - user-service
+    get:
+      operationId: get-user-data
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/user-with-id'
+          description: OK
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Fetch currently logged in users data
+      tags:
+      - user-service
+      x-accepts: application/json
+    put:
+      operationId: put-user-data
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User_update_object'
+      responses:
+        "201":
+          description: User update successfull
+        "401":
+          description: Unauthorized
+        "422":
+          description: Unprocessable entity. The requestBody was no valid user update
+            object
+        "500":
+          description: Internal server error
+      security:
+      - jwt: []
+      summary: Update currently logged in user
+      tags:
+      - user-service
+      x-accepts: application/json
+      x-contentType: application/json
+    servers:
+    - url: "https://users.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /user/settings:
+    delete:
+      description: Delete all settings of the currently authorized user
+      operationId: delete-user-settings
+      responses:
+        "200":
+          description: OK
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Delete all settings of the currently authorized user
+      tags:
+      - user-service
+    get:
+      description: Get user's settings.
+      operationId: get-user-settings
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/settings'
+          description: OK
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server error
+      security:
+      - jwt: []
+      summary: Get settings of the currently logged in user
+      tags:
+      - user-service
+      x-accepts: application/json
+    post:
+      description: Set current user's settings.
+      operationId: set-user-settings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/settings'
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+        "409":
+          description: User settings already exist
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Set current user's settings.
+      tags:
+      - user-service
+      x-accepts: application/json
+      x-contentType: application/json
+    servers:
+    - url: "https://users.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /users/admin:
+    get:
+      description: Get all users.
+      operationId: admin-get-user
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/user-with-id'
+                type: array
+          description: OK
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      summary: Get all users.
+      tags:
+      - user-service
+      x-accepts: application/json
+    post:
+      description: Create a user.
+      operationId: admin-create-user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/user'
+      responses:
+        "200":
+          description: OK
+        "201":
+          description: Created
+        "401":
+          description: Unauthorized
+        "422":
+          description: Unprocessable Entity
+        "500":
+          description: Internal Server Error
+      summary: Create user.
+      tags:
+      - user-service
+      x-contentType: application/json
+    servers:
+    - url: "https://users.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /diary:
+    delete:
+      description: Delete current user's mood diary.
+      operationId: delete-mood-diary
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Delete current user's mood diary.
+      tags:
+      - mood-diary-service
+    get:
+      description: Get the mood diary for the currently authenticated user.
+      operationId: get-mood-diary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/mood'
+                type: array
+          description: OK
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Get mood diary by userId.
+      tags:
+      - mood-diary-service
+      x-accepts: application/json
+      x-tira: true
+    post:
+      description: Add mood to user's diary.
+      operationId: add-mood
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/mood'
+      responses:
+        "201":
+          description: Created
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Add mood to diary
+      tags:
+      - mood-diary-service
+      x-contentType: application/json
+      x-tira: true
+    servers:
+    - url: "https://diary.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /safetyNet:
+    get:
+      description: Get currently authenticated users safety-net
+      operationId: get-safetynet
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/safetyNet'
+          description: OK
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Get currently authenticated users safety-net
+      tags:
+      - motivator-service
+      x-accepts: application/json
+    post:
+      description: Add safety net item to currently authenticated user safety net.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/safetyNetItem'
+      responses:
+        "200":
+          description: OK
+        "201":
+          description: Created
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Add safety net item to currently authenticated user safety net.
+      tags:
+      - motivator-service
+      x-accepts: application/json
+      x-contentType: application/json
+    servers:
+    - url: "https://motivator.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /motivator:
+    delete:
+      description: Delete a motivator from user's motivators.
+      operationId: delete-motivator-userId
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Delete a motivator from user's motivators.
+      tags:
+      - motivator-service
+    get:
+      description: Get current motivators by userId.
+      operationId: get-motivator-userId
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/get_motivator_userId_200_response_inner'
+                type: array
+          description: OK
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Get current motivators by userId.
+      tags:
+      - motivator-service
+    post:
+      description: Add motivator to user's motivators.
+      operationId: post-motivator-userId
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/motivator'
+      responses:
+        "200":
+          description: OK
+        "201":
+          description: Created
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Add motivator to user's motivators.
+      tags:
+      - motivator-service
+    servers:
+    - url: "https://motivator.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /motivator/result/{motivatorId}:
+    delete:
+      description: Delete result from user's current motivator by timestamp.
+      operationId: delete-motivator-userId-result-motivatorId
+      parameters:
+      - description: The ID of the motivator to fetch users results
+        explode: false
+        in: path
+        name: motivatorId
+        required: true
+        schema:
+          type: integer
+        style: simple
+      responses:
+        "200":
+          description: OK
+        "500":
+          description: Internal Service Error
+      security:
+      - jwt: []
+      summary: Delete result from user's current motivator by timestamp.
+      tags:
+      - motivator-service
+    post:
+      description: Add a new result to user's current motivator.
+      operationId: post-motivator-userId-feedback-motivatorId
+      parameters:
+      - description: The ID of the motivator to fetch users results
+        explode: false
+        in: path
+        name: motivatorId
+        required: true
+        schema:
+          type: integer
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/motivatorResult'
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Add a new result to user's current motivator.
+      tags:
+      - motivator-service
+    servers:
+    - url: "https://motivator.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /tilt:
+    get:
+      description: "Get tilt document, i.e. a machine-readable privacy policy."
+      operationId: get-tilt
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tilt'
+          description: OK
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      summary: Get tilt document.
+      tags:
+      - tilt-service
+      x-accepts: application/json
+      x-tira: false
+    post:
+      description: "Set tilt document, i.e. a machine-readable privacy policy."
+      operationId: post-tilt
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tilt'
+      responses:
+        "200":
+          description: OK
+        "201":
+          description: Created
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      summary: Set tilt document.
+      tags:
+      - tilt-service
+      x-contentType: application/json
+    servers:
+    - url: "https://tilt.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+components:
+  headers: {}
+  parameters:
+    motivatorId:
+      explode: false
+      in: path
+      name: motivatorId
+      required: true
+      schema:
+        type: integer
+      style: simple
+  requestBodies: {}
+  responses: {}
+  schemas:
+    timestamp:
+      properties:
+        timestamp:
+          format: date-time
+          type: string
+      title: timestamp
+      type: object
+    selfServiceRegistrationFlow:
+      example:
+        expires_at: 2000-01-23T04:56:07.000Z
+        ui:
+          nodes:
+          - meta:
+              label:
+                context: "{}"
+                id: 0
+                text: text
+                type: type
+            messages:
+            - context: "{}"
+              id: 0
+              text: text
+              type: type
+            - context: "{}"
+              id: 0
+              text: text
+              type: type
+            type: text
+            group: default
+          - meta:
+              label:
+                context: "{}"
+                id: 0
+                text: text
+                type: type
+            messages:
+            - context: "{}"
+              id: 0
+              text: text
+              type: type
+            - context: "{}"
+              id: 0
+              text: text
+              type: type
+            type: text
+            group: default
+          method: method
+          action: action
+          messages:
+          - context: "{}"
+            id: 0
+            text: text
+            type: type
+          - context: "{}"
+            id: 0
+            text: text
+            type: type
+        return_to: return_to
+        type: type
+        issued_at: 2000-01-23T04:56:07.000Z
+        request_url: request_url
+      properties:
+        active:
+          $ref: '#/components/schemas/identityCredentialsType'
+        expires_at:
+          description: "ExpiresAt is the time (UTC) when the flow expires. If the\
+            \ user still wishes to log in,\na new flow has to be initiated."
+          format: date-time
+          type: string
+        id:
+          format: uuid4
+          type: string
+        issued_at:
+          description: IssuedAt is the time (UTC) when the flow occurred.
+          format: date-time
+          type: string
+        request_url:
+          description: |-
+            RequestURL is the initial URL that was requested from Ory Kratos. It can be used
+            to forward information contained in the URL's path or query for example.
+          type: string
+        return_to:
+          description: ReturnTo contains the requested return_to URL.
+          type: string
+        type:
+          description: The flow type can either be `api` or `browser`.
+          title: Type is the flow type.
+          type: string
+        ui:
+          $ref: '#/components/schemas/uiContainer'
+      required:
+      - expires_at
+      - id
+      - issued_at
+      - request_url
+      - type
+      - ui
+      type: object
+    identityCredentialsType:
+      description: and so on.
+      enum:
+      - password
+      - totp
+      - oidc
+      - webauthn
+      - lookup_secret
+      title: "CredentialsType  represents several different credential types, like\
+        \ password credentials, passwordless credentials,"
+      type: string
+    UUID:
+      format: uuid4
+      type: string
+    uiContainer:
+      description: Container represents a HTML Form. The container can work with both
+        HTTP Form and JSON requests
+      example:
+        nodes:
+        - meta:
+            label:
+              context: "{}"
+              id: 0
+              text: text
+              type: type
+          messages:
+          - context: "{}"
+            id: 0
+            text: text
+            type: type
+          - context: "{}"
+            id: 0
+            text: text
+            type: type
+          type: text
+          group: default
+        - meta:
+            label:
+              context: "{}"
+              id: 0
+              text: text
+              type: type
+          messages:
+          - context: "{}"
+            id: 0
+            text: text
+            type: type
+          - context: "{}"
+            id: 0
+            text: text
+            type: type
+          type: text
+          group: default
+        method: method
+        action: action
+        messages:
+        - context: "{}"
+          id: 0
+          text: text
+          type: type
+        - context: "{}"
+          id: 0
+          text: text
+          type: type
+      properties:
+        action:
+          description: "Action should be used as the form action URL `<form action=\"\
+            {{ .Action }}\" method=\"post\">`."
+          type: string
+        messages:
+          items:
+            $ref: '#/components/schemas/uiText'
+          type: array
+        method:
+          description: Method is the form method (e.g. POST)
+          type: string
+        nodes:
+          items:
+            $ref: '#/components/schemas/uiNode'
+          type: array
+      required:
+      - action
+      - method
+      - nodes
+      type: object
+    uiText:
+      example:
+        context: "{}"
+        id: 0
+        text: text
+        type: type
+      properties:
+        context:
+          description: The message's context. Useful when customizing messages.
+          type: object
+        id:
+          format: int64
+          type: integer
+        text:
+          description: The message text. Written in american english.
+          type: string
+        type:
+          type: string
+      required:
+      - id
+      - text
+      - type
+      type: object
+    uiNode:
+      description: "Nodes are represented as HTML elements or their native UI equivalents.\
+        \ For example,\na node can be an `<img>` tag, or an `<input element>` but\
+        \ also `some plain text`."
+      example:
+        meta:
+          label:
+            context: "{}"
+            id: 0
+            text: text
+            type: type
+        messages:
+        - context: "{}"
+          id: 0
+          text: text
+          type: type
+        - context: "{}"
+          id: 0
+          text: text
+          type: type
+        type: text
+        group: default
+      properties:
+        attributes:
+          $ref: '#/components/schemas/uiNodeAttributes'
+        group:
+          description: Group specifies which group (e.g. password authenticator) this
+            node belongs to.
+          enum:
+          - default
+          - password
+          - oidc
+          - profile
+          - link
+          - totp
+          - lookup_secret
+          - webauthn
+          type: string
+        messages:
+          items:
+            $ref: '#/components/schemas/uiText'
+          type: array
+        meta:
+          $ref: '#/components/schemas/uiNodeMeta'
+        type:
+          description: The node's type
+          enum:
+          - text
+          - input
+          - img
+          - a
+          - script
+          type: string
+      required:
+      - attributes
+      - group
+      - messages
+      - meta
+      - type
+      title: Node represents a flow's nodes
+      type: object
+    uiNodeAttributes:
+      discriminator:
+        mapping:
+          a: '#/components/schemas/uiNodeAnchorAttributes'
+          img: '#/components/schemas/uiNodeImageAttributes'
+          input: '#/components/schemas/uiNodeInputAttributes'
+          script: '#/components/schemas/uiNodeScriptAttributes'
+          text: '#/components/schemas/uiNodeTextAttributes'
+        propertyName: node_type
+      oneOf:
+      - $ref: '#/components/schemas/uiNodeInputAttributes'
+      - $ref: '#/components/schemas/uiNodeTextAttributes'
+      - $ref: '#/components/schemas/uiNodeImageAttributes'
+      - $ref: '#/components/schemas/uiNodeAnchorAttributes'
+      - $ref: '#/components/schemas/uiNodeScriptAttributes'
+      title: Attributes represents a list of attributes (e.g. `href="foo"` for links).
+    uiNodeInputAttributes:
+      description: InputAttributes represents the attributes of an input node
+      properties:
+        disabled:
+          description: Sets the input's disabled field to true or false.
+          type: boolean
+        label:
+          $ref: '#/components/schemas/uiText'
+        name:
+          description: The input's element name.
+          type: string
+        node_type:
+          description: |-
+            NodeType represents this node's types. It is a mirror of `node.type` and
+            is primarily used to allow compatibility with OpenAPI 3.0.  In this struct it technically always is "input".
+          type: string
+        onclick:
+          description: |-
+            OnClick may contain javascript which should be executed on click. This is primarily
+            used for WebAuthn.
+          type: string
+        pattern:
+          description: The input's pattern.
+          type: string
+        required:
+          description: Mark this input field as required.
+          type: boolean
+        type:
+          type: string
+        value:
+          description: The input's value.
+          nullable: true
+      required:
+      - disabled
+      - name
+      - node_type
+      - type
+      type: object
+    uiNodeTextAttributes:
+      properties:
+        id:
+          description: A unique identifier
+          type: string
+        node_type:
+          description: |-
+            NodeType represents this node's types. It is a mirror of `node.type` and
+            is primarily used to allow compatibility with OpenAPI 3.0.  In this struct it technically always is "text".
+          type: string
+        text:
+          $ref: '#/components/schemas/uiText'
+      required:
+      - id
+      - node_type
+      - text
+      title: TextAttributes represents the attributes of a text node.
+      type: object
+    uiNodeImageAttributes:
+      properties:
+        height:
+          description: Height of the image
+          format: int64
+          type: integer
+        id:
+          description: A unique identifier
+          type: string
+        node_type:
+          description: |-
+            NodeType represents this node's types. It is a mirror of `node.type` and
+            is primarily used to allow compatibility with OpenAPI 3.0.  In this struct it technically always is "img".
+          type: string
+        src:
+          description: "The image's source URL.\nformat: uri"
+          type: string
+        width:
+          description: Width of the image
+          format: int64
+          type: integer
+      required:
+      - height
+      - id
+      - node_type
+      - src
+      - width
+      title: ImageAttributes represents the attributes of an image node.
+      type: object
+    uiNodeAnchorAttributes:
+      properties:
+        href:
+          description: "The link's href (destination) URL.\nformat: uri"
+          type: string
+        id:
+          description: A unique identifier
+          type: string
+        node_type:
+          description: |-
+            NodeType represents this node's types. It is a mirror of `node.type` and
+            is primarily used to allow compatibility with OpenAPI 3.0.  In this struct it technically always is "a".
+          type: string
+        title:
+          $ref: '#/components/schemas/uiText'
+      required:
+      - href
+      - id
+      - node_type
+      - title
+      title: AnchorAttributes represents the attributes of an anchor node.
+      type: object
+    uiNodeScriptAttributes:
+      properties:
+        async:
+          description: The script async type
+          type: boolean
+        crossorigin:
+          description: The script cross origin policy
+          type: string
+        id:
+          description: A unique identifier
+          type: string
+        integrity:
+          description: The script's integrity hash
+          type: string
+        node_type:
+          description: |-
+            NodeType represents this node's types. It is a mirror of `node.type` and
+            is primarily used to allow compatibility with OpenAPI 3.0. In this struct it technically always is "script".
+          type: string
+        nonce:
+          description: |-
+            Nonce for CSP
+            A nonce you may want to use to improve your Content Security Policy.
+            You do not have to use this value but if you want to improve your CSP
+            policies you may use it. You can also choose to use your own nonce value!
+          type: string
+        referrerpolicy:
+          description: The script referrer policy
+          type: string
+        src:
+          description: The script source
+          type: string
+        type:
+          description: The script MIME type
+          type: string
+      required:
+      - async
+      - crossorigin
+      - id
+      - integrity
+      - node_type
+      - nonce
+      - referrerpolicy
+      - src
+      - type
+      title: ScriptAttributes represent script nodes which load javascript.
+      type: object
+    uiNodeMeta:
+      description: |-
+        This might include a label and other information that can optionally
+        be used to render UIs.
+      example:
+        label:
+          context: "{}"
+          id: 0
+          text: text
+          type: type
+      properties:
+        label:
+          $ref: '#/components/schemas/uiText'
+      title: A Node's Meta Information
+      type: object
+    jsonError:
+      description: The standard Ory JSON API error format.
+      properties:
+        error:
+          $ref: '#/components/schemas/genericError'
+      required:
+      - error
+      title: Kratos API JSON Error Response
+      type: object
+    genericError:
+      properties:
+        code:
+          description: The status code
+          example: 404
+          format: int64
+          type: integer
+        debug:
+          description: |-
+            Debug information
+            This field is often not exposed to protect against leaking
+            sensitive information.
+          example: SQL field "foo" is not a bool.
+          type: string
+        details:
+          additionalProperties: false
+          description: Further error details
+          type: object
+        id:
+          description: |-
+            The error ID
+            Useful when trying to identify various errors in application logic.
+          type: string
+        message:
+          description: |-
+            Error message
+            The error's message.
+          example: The resource could not be found
+          type: string
+        reason:
+          description: A human-readable reason for the error
+          example: User with ID 1234 does not exist.
+          type: string
+        request:
+          description: |-
+            The request ID
+            The request ID is often exposed internally in order to trace
+            errors across service architectures. This is often a UUID.
+          example: d7ef54b1-ec15-46e6-bccb-524b82c035e6
+          type: string
+        status:
+          description: The status description
+          example: Not Found
+          type: string
+      required:
+      - message
+      type: object
+    registration-with-flow-id-response:
+      description: Registration with FlowID
+      example:
+        accountKey: 550e8400-e29b-11d4-a716-446655440000
+      properties:
+        accountKey:
+          format: uuid
+          maxLength: 36
+          minLength: 36
+          type: string
+      required:
+      - accountKey
+      type: object
+    selfServiceBrowserLocationChangeRequiredError:
+      properties:
+        code:
+          description: The status code
+          example: 404
+          format: int64
+          type: integer
+        debug:
+          description: |-
+            Debug information
+            This field is often not exposed to protect against leaking
+            sensitive information.
+          example: SQL field "foo" is not a bool.
+          type: string
+        details:
+          additionalProperties: true
+          description: Further error details
+          type: object
+        id:
+          description: |-
+            The error ID
+            Useful when trying to identify various errors in application logic.
+          type: string
+        message:
+          description: |-
+            Error message
+            The error's message.
+          example: The resource could not be found
+          type: string
+        reason:
+          description: A human-readable reason for the error
+          example: User with ID 1234 does not exist.
+          type: string
+        redirect_browser_to:
+          description: Since when the flow has expired
+          type: string
+        request:
+          description: |-
+            The request ID
+            The request ID is often exposed internally in order to trace
+            errors across service architectures. This is often a UUID.
+          example: d7ef54b1-ec15-46e6-bccb-524b82c035e6
+          type: string
+        status:
+          description: The status description
+          example: Not Found
+          type: string
+      required:
+      - message
+      title: Is sent when a flow requires a browser to change its location.
+      type: object
+    selfServiceLoginFlow:
+      description: This object represents a login flow. A login flow is initiated
+        at the "Initiate Login API / Browser Flow"
+      example:
+        expires_at: 2000-01-23T04:56:07.000Z
+        ui:
+          nodes:
+          - meta:
+              label:
+                context: "{}"
+                id: 0
+                text: text
+                type: type
+            messages:
+            - context: "{}"
+              id: 0
+              text: text
+              type: type
+            - context: "{}"
+              id: 0
+              text: text
+              type: type
+            type: text
+            group: default
+          - meta:
+              label:
+                context: "{}"
+                id: 0
+                text: text
+                type: type
+            messages:
+            - context: "{}"
+              id: 0
+              text: text
+              type: type
+            - context: "{}"
+              id: 0
+              text: text
+              type: type
+            type: text
+            group: default
+          method: method
+          action: action
+          messages:
+          - context: "{}"
+            id: 0
+            text: text
+            type: type
+          - context: "{}"
+            id: 0
+            text: text
+            type: type
+        updated_at: 2000-01-23T04:56:07.000Z
+        created_at: 2000-01-23T04:56:07.000Z
+        refresh: true
+        return_to: return_to
+        type: type
+        issued_at: 2000-01-23T04:56:07.000Z
+        request_url: request_url
+      properties:
+        active:
+          $ref: '#/components/schemas/identityCredentialsType'
+        created_at:
+          description: CreatedAt is a helper struct field for gobuffalo.pop.
+          format: date-time
+          type: string
+        expires_at:
+          description: "ExpiresAt is the time (UTC) when the flow expires. If the\
+            \ user still wishes to log in,\na new flow has to be initiated."
+          format: date-time
+          type: string
+        id:
+          format: uuid4
+          type: string
+        issued_at:
+          description: IssuedAt is the time (UTC) when the flow started.
+          format: date-time
+          type: string
+        refresh:
+          description: Refresh stores whether this login flow should enforce re-authentication.
+          type: boolean
+        request_url:
+          description: |-
+            RequestURL is the initial URL that was requested from Ory Kratos. It can be used
+            to forward information contained in the URL's path or query for example.
+          type: string
+        return_to:
+          description: ReturnTo contains the requested return_to URL.
+          type: string
+        type:
+          description: The flow type can either be `api` or `browser`.
+          title: Type is the flow type.
+          type: string
+        ui:
+          $ref: '#/components/schemas/uiContainer'
+        updated_at:
+          description: UpdatedAt is a helper struct field for gobuffalo.pop.
+          format: date-time
+          type: string
+      required:
+      - expires_at
+      - id
+      - issued_at
+      - request_url
+      - type
+      - ui
+      title: Login Flow
+      type: object
+    session:
+      example:
+        session_token: 2wBPKcSG0KxSxDBrgJA8ackTwBIea9y5
+      properties:
+        session_token:
+          type: string
+        session:
+          type: object
+      title: Kratos API Session
+      type: object
+    user-with-id:
+      allOf:
+      - $ref: '#/components/schemas/user_with_id_allOf'
+      - $ref: '#/components/schemas/user'
+      title: user-with-id
+      x-examples:
+        example-1:
+          user_id: 705e4dcb-3ecd-24f3-3a35-3e926e4bded5
+          username: string
+          role: admin
+    user:
+      description: A user object
+      properties:
+        user_id:
+          format: uuid
+          maxLength: 36
+          minLength: 36
+          type: string
+        username:
+          maxLength: 25
+          minLength: 2
+          type: string
+      type: object
+      x-examples:
+        example-1:
+          user_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          username: maja
+          role: user
+        example-2:
+          user_id: 123e4567-e89b-12d3-a456-426655440000
+          username: string
+          role: admin
+      x-tira: true
+    settings:
+      items:
+        $ref: '#/components/schemas/setting'
+      type: array
+    setting:
+      description: Key-value pairs of settings in the app.
+      example:
+        lang: de
+      properties:
+        lang:
+          default: de
+          enum:
+          - de
+          - en
+          maxLength: 2
+          minLength: 2
+          type: string
+      title: setting
+      type: object
+    mood:
+      example:
+        type: postive
+        description: Today I worked 14h straight for the project. Doing fantastic
+          is literally inevitable
+        timestamp: 2022-06-25T20:03:07+00:00
+      properties:
+        type:
+          enum:
+          - positive
+          - negative
+          - neutral
+          type: string
+        description:
+          type: string
+        timestamp:
+          format: date-time
+          type: string
+      title: Mood Object
+      type: object
+    safetyNet:
+      items:
+        $ref: '#/components/schemas/safetyNetItem'
+      title: SafetyNet Object
+      type: array
+    safetyNetItem:
+      description: ""
+      example:
+        feedback:
+        - itHelped: true
+          comment: comment
+          timestamp: 2000-01-23T04:56:07.000+00:00
+        - itHelped: true
+          comment: comment
+          timestamp: 2000-01-23T04:56:07.000+00:00
+        strategies:
+        - strategies
+        - strategies
+        name: name
+        type: pet
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          description: "Which kind of item is this (i.a., influences symbol in UI)?"
+          enum:
+          - pet
+          - other
+          - situationControl
+          - relaxation
+          minLength: 1
+          type: string
+        strategies:
+          description: How can this item help the user to feel better?
+          items:
+            type: string
+          type: array
+        feedback:
+          items:
+            $ref: '#/components/schemas/safetyNetItemFeedback'
+          type: array
+      required:
+      - name
+      - strategies
+      - type
+      type: object
+      x-examples:
+        example-1:
+          name: Theo
+          type: pet
+          strategies:
+          - cuddle
+          - play
+          - go for a walk
+    safetyNetItemFeedback:
+      description: ""
+      example:
+        itHelped: true
+        comment: comment
+        timestamp: 2000-01-23T04:56:07.000+00:00
+      properties:
+        itHelped:
+          type: boolean
+        comment:
+          type: string
+        timestamp:
+          format: date-time
+          type: string
+      title: safetyNetItemFeedback
+      type: object
+      x-examples: {}
+    motivator:
+      properties:
+        id:
+          type: string
+        type:
+          enum:
+          - situationControl
+          - relaxation
+          type: string
+        headline:
+          type: string
+        description:
+          type: string
+        textContents:
+          items:
+            type: string
+          type: array
+        mediaContents:
+          items:
+            $ref: '#/components/schemas/motivator_mediaContents_inner'
+          type: array
+        userInputForm:
+          description: "May describe a form for input by the user (format to be defined,\
+            \ e.g., JSON Schema)."
+          type: string
+      title: motivator
+      type: object
+    motivatorResult:
+      properties:
+        motivatorId:
+          type: string
+        timestamp:
+          format: date-time
+          type: string
+        results:
+          items:
+            type: string
+          type: array
+      title: motivatorResult
+      type: object
+    tilt:
+      type: object
+    User_update_object:
+      properties:
+        email:
+          type: string
+      required:
+      - email
+      title: User update object
+      type: object
+    get_motivator_userId_200_response_inner:
+      allOf:
+      - $ref: '#/components/schemas/motivator'
+      - $ref: '#/components/schemas/motivatorResult'
+    user_with_id_allOf:
+      properties:
+        id:
+          type: number
+      type: object
+    motivator_mediaContents_inner:
+      properties:
+        format:
+          enum:
+          - document
+          - image
+          - audio
+          - video
+          type: string
+        url:
+          format: uri
+          type: string
+      type: object
+  securitySchemes:
+    jwt:
+      bearerFormat: JWT
+      description: "Example: \n> Authorization: Bearer <token>"
+      scheme: bearer
+      type: http
