@@ -1,0 +1,4118 @@
+openapi: 3.0.3
+info:
+  contact:
+    email: mail@kopfsachen.org
+    name: Kopfsachen e. V.
+    url: https://www.kopfsachen.org
+  description: Kopfsachen e. V. is an association for the promotion of young people's
+    mental health. The goal is to teach the basics of mental health literacy in various
+    educational formats.
+  license:
+    name: MIT license
+    url: https://github.com/kopfsachen-dev/api/blob/main/LICENSE
+  title: Kopfsachen
+  version: 1.0.2
+servers:
+- description: Development API for testing purposes
+  url: "https://{service}.api.{environment}.mindtastic.lol"
+  variables:
+    service:
+      default: echo
+      description: The requests gets routed to the individual microservice by pattern
+        matching the requests Host header
+    environment:
+      default: live
+      description: Choose the environment to work on.
+      enum:
+      - live
+      - stage
+      - dev
+tags:
+- description: Service for storing user data and settings
+  name: user-service
+- description: Fetch and stores mood diary data
+  name: mood-diary-service
+- description: Motivator exercises and safetynet
+  name: motivator-service
+- description: Static wiki articles
+  name: wiki-service
+- description: Tilt provides transparency information on data processing using the
+    TILT format
+  name: tilt-service
+- description: "The authentication API is based on the ORY Kratos HTTP API, but with\
+    \ some additional tweaks. See [Kratos Docs](https://www.ory.sh/docs/kratos/reference/api)\
+    \ and [Mindtastic Docs](github.com/mindtastic/bouncer/wiki) for more information."
+  name: authentication
+paths:
+  /self-service/registration/api:
+    get:
+      description: "This endpoint initiates a registration flow for API clients such\
+        \ as microservices, mobile devices, and so on.\n\nTo fetch and interact with\
+        \ an existing registration flow call `/self-service/registration/flows?flow=<flow_id>`.\n\
+        \nYou MUST NOT use this endpoint in browser applications, neither client-side\
+        \ (SPAs, React, Angular) nor server-side (JSP, NodeJS). Using this endpoint\
+        \ makes you vulnerable to [CSRF attacks](https://owasp.org/www-community/attacks/csrf).\n\
+        \nThis endpoint MUST ONLY be used in scenarios such as native mobile apps\
+        \ (React Native, Objective C, Swift, Java, ...)."
+      operationId: bouncer:initRegistration:api
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/apiRegistrationFlow'
+          description: "The login flow got created successfully. While the response\
+            \ returns a lot of information, that can be used to build a UI accordingly,\
+            \ it might be enough to extract the `id` value from the JSON response\
+            \ most of the time.\n\n`id` is the `flowId` you need to provide to the\
+            \ `POST` registration endpoint.\n\nYou can extract the URL of the endpoint\
+            \ to call also from `ui.action` with the required HTTP method `ui.method`"
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Internal server error
+      servers:
+      - url: "https://auth.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: "Initate registration flow for APIs, Services, ..."
+      tags:
+      - authentication
+  /self-service/registration/browser:
+    get:
+      description: "This endpoint initializes a browser-based user registration flow.\
+        \ This endpoint will set the appropriate cookies and anti-CSRF measures required\
+        \ for browser-based flows.\n\nThe request must provide an Accepts headers\
+        \ of `application/json`\n\nIf this endpoint is opened as a link in the browser,\
+        \ it will be redirected to\n`selfservice.flows.registration.ui_url` with the\
+        \ flow ID set as the query parameter `?flow=`. \n\nIf a valid user session\
+        \ exists already, the browser will be redirected to `urls.default_redirect_url`.\n\
+        \nIf this endpoint is called via an AJAX request, the response contains the\
+        \ flow without a redirect. In the case of an error, the `error.id` of the\
+        \ JSON response body can be one of:\n\n  - `session_already_available`: The\
+        \ user is already signed in.\n\n  - `security_csrf_violation`: Unable to fetch\
+        \ the flow because a CSRF violation occurred.\n\n  - `security_identity_mismatch`:\
+        \ The backend team fucked something up.\n\nIf this endpoint is called via\
+        \ an AJAX request, the response contains the registration flow without a redirect.\n\
+        \nThis endpoint is NOT INTENDED for clients that do not have a browser (Chrome,\
+        \ Firefox, ...) as cookies are needed."
+      operationId: bouncer:initRegistration:browser
+      parameters:
+      - description: The URL to return the browser after the flow was completed. For
+          Kopfsachen you might never need that option.
+        explode: true
+        in: query
+        name: return_to
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/browserRegistrationFlow'
+          description: Returns the successfully created browser registration flow
+        "303":
+          description: Redirect to `urls.default_redirect_url` as a valid user session
+            already exists for the HTTP cookie.
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Internal server error
+      servers:
+      - url: "https://auth.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: Initialize Registration Flow for Browsers
+      tags:
+      - authentication
+      x-accepts: application/json
+  /self-service/registration:
+    post:
+      description: "Use this endpoint to complete a registration flow. It will generate\
+        \ the unique account key for the newly created user, that serves as single\
+        \ credential in the authentication system.\n\nFor API flows:\n  - API flows\
+        \ are responded with `200 OK` on success and a application/json body with\
+        \ the created identity.\n  \n  - It also performs an auto login process and\
+        \ includes `session` and `session_token`.\n\n  - If the flow is expired it\
+        \ returns `410 Gone`.\n\nFor Browser Flows:\n  - Browser flows expects Content-Type\
+        \ and Accepts headers of `application/json`.\n\n  - The request body must\
+        \ contain an application/json body with the `csrf_token` property set accordingly\n\
+        \n  - On success they respond with `200 OK` and a application/json body with\
+        \ the signed in identity and a `Set-Cookie` header on success. \n\n  - If\
+        \ the flow expired, it responds with `303 See Other`. Call the /self-service/registration/browser\
+        \ endpoint again to get a new flow.\n\nOn success, the account key is in the\
+        \ response at `identity.traits.accountKey`. Fetch it and **save it carefully**,\
+        \ as there is no way to recover a lost account.\n\nThe endpoint also performs\
+        \ auto login. The session token that can be used authorize requests, using\
+        \ `Authentication: Bearer <session token>` HTTP header is in `session.id`."
+      operationId: bouncer:register
+      parameters:
+      - description: The Registration flow ID as an URL Query parameters
+        explode: true
+        in: query
+        name: flow
+        required: true
+        schema:
+          type: string
+        style: form
+      - description: "When using the browser flow, the HTTP cookie (encodes session\
+          \ and CSRF token) must be present"
+        explode: false
+        in: header
+        name: Cookie
+        required: false
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        $ref: '#/components/requestBodies/browserFlowSubmitBody'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registration-with-flow-id-response'
+          description: OK. Registration successful.
+        "303":
+          description: Browser flow expired
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/bouncer_register_400_response'
+          description: Bad requests. Maybe the flow id missing.
+        "410":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Gone. The appropriate auth flow expired before submitting.
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Internal server error
+      servers:
+      - url: "https://auth.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: Complete registration flow
+      tags:
+      - authentication
+      x-accepts: application/json
+      x-contentType: application/json
+  /self-service/login/api:
+    get:
+      description: |-
+        This endpoint initiates a login flow for API clients that do not use a browser.
+
+        It behaves similar to the registration endpoints.
+      operationId: bouncer:initLogin:api
+      parameters:
+      - description: "Refresh a login.\n\nIf set to true, this will refresh an existing\
+          \ login session by\nasking the user to sign in again. This will reset the\n\
+          authenticated_at time of the session."
+        explode: true
+        in: query
+        name: refresh
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: The Session token of the Session performing the flow. Required
+          when using the refresh parameter
+        explode: false
+        in: header
+        name: X-Session-Token
+        required: false
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/apiLoginFlow'
+          description: OK
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Internal Service Error
+      servers:
+      - url: "https://auth.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: Initiate API login flow
+      tags:
+      - authentication
+      x-accepts: application/json
+  /self-service/login/browser:
+    get:
+      description: |-
+        This endpoint initializes a browser-based user registration flow. This endpoint will set the appropriate cookies and anti-CSRF measures required for browser-based flows.
+
+        The request must provide an Accepts headers of `application/json`
+      operationId: bouncer:initLogin:browser
+      parameters:
+      - description: The URL to return the browser after the flow was completed. For
+          Kopfsachen you might never need that option.
+        explode: true
+        in: query
+        name: return_to
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/browserLoginFlow'
+          description: Returns the successfully created browser login flow
+        "303":
+          description: Redirect to `urls.default_redirect_url` as a valid user session
+            already exists for the HTTP cookie.
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Internal server error
+      servers:
+      - url: "https://auth.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: Initiate browser login flow
+      tags:
+      - authentication
+      x-accepts: application/json
+  /self-service/login:
+    post:
+      description: "Use this endpoint to complete a login flow. This endpoint behaves\
+        \ differently for API and browser flows, similar to the registration endpoint.\n\
+        \nAPI flow:\n  - An API flow expects `application/json` to be sent in the\
+        \ request body and the Content-Type header to be set accordingly.\n\n  - On\
+        \ success it responses with `200 OK` and an application/json body with the\
+        \ session Token.\n\n  - If the request body is invalid, hence the validations\
+        \ fails, a `400 Bad Request` error is returned.\n\n  - If the flow expired,\
+        \ a `410 Gone` response is returned, with the appropriate error message set.\n\
+        \nBrowser flow:\n  - Browser flows expects Content-Type and Accepts headers\
+        \ of `application/json`.\n\n  - The request body must contain a valid `csrf_token`\n\
+        \n  - On success, a `200 OK` response is returned with a body containing the\
+        \ the session and identitiy information on the logged in user. The response\
+        \ also contains a `Set-Cookie` header.\n\n  - If the flow expired, it responds\
+        \ with `303 See Other`. Call the /self-service/login/browser endpoint again\
+        \ to get a new flow.\n\n  - If the request body is invalid, hence the validations\
+        \ fails, a `400 Bad Request` error is returned.\n\nExtract `session.id` as\
+        \ it's your session token. You can now authorize requests by setting the `Authorize:\
+        \ Bearer <session token>` header on requests."
+      operationId: bouncer:login
+      parameters:
+      - description: The Login flow ID as an URL Query parameters
+        explode: true
+        in: query
+        name: flow
+        required: true
+        schema:
+          type: string
+      requestBody:
+        $ref: '#/components/requestBodies/browserFlowSubmitBody'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/session'
+          description: OK.
+        "303":
+          description: Returns the after login redirection url when a browser flow
+            got submitted.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/selfServiceLoginFlow'
+          description: Form validation error
+        "410":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Flow invalid for the operation
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/selfServiceBrowserLocationChangeRequiredError'
+          description: Browser redirection required
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Internal server error
+      servers:
+      - url: "https://auth.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: Submit Login Flow
+      tags:
+      - authentication
+      x-accepts: application/json
+      x-contentType: application/json
+  /self-service/logout/api:
+    delete:
+      description: "This endpoints logs a user out, using the provided session token.\
+        \ If the session token was successfully revoked,\nthe server returns a 204\
+        \ No Content response. A 204 No Content is reponse is also sent when the session\
+        \ token has been already revoked.\n\nIf the session token is malformed or\
+        \ does not exists a 403 Forbidden response is returned.\n\nThis endpoint is\
+        \ only intended for API applications, as it does not remove any HTTP Cookies.\
+        \ Use the Browser logout instead."
+      operationId: bouncer:logout:api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/submitSelfServiceLogoutFlowWithoutBrowserBody'
+        required: true
+        x-originalParamName: Body
+      responses:
+        "204":
+          description: Logout successfull
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/bouncer_logout_api_403_response'
+          description: Invalid Session Token for Logout
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Internal Service Error
+      servers:
+      - url: "https://auth.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: API user logout
+      tags:
+      - authentication
+      x-contentType: application/json
+      x-accepts: application/json
+  /self-service/logout/browser:
+    get:
+      description: "This endpoint initializes a browser-based user logout flow and\
+        \ a URL which can be used to log out the user.\n\nThe request must provide\
+        \ an Accepts headers of `application/json`\n\nThis endpoint is NOT INTENDED\
+        \ for API clients and only works with browsers (Chrome, Firefox, ...). For\
+        \ API clients you can call the `/self-service/logout/api` URL directly with\
+        \ the Session Token. The URL is only valid for the currently signed in user.\
+        \ If no user is signed in, this endpoint returns a 401 error.\n\nWhen calling\
+        \ this endpoint from a backend, please ensure to properly forward the HTTP\
+        \ cookies."
+      operationId: bouncer:initLogout:browser
+      parameters:
+      - description: "HTTP Cookies\nIf you call this endpoint from a backend, please\
+          \ include the\noriginal Cookie header in the request."
+        explode: false
+        in: header
+        name: cookie
+        required: false
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/browserLogoutUrl'
+          description: Return successfully created browser logout Flow
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/bouncer_initLogout_browser_401_response'
+          description: Unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Internal Server Error
+      servers:
+      - url: "https://auth.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: Initiate logout flow for browser
+      tags:
+      - authentication
+      x-accepts: application/json
+  /self-service/logout:
+    get:
+      description: "This endpoint logs out an identity in a self-service manner.\n\
+        \nIf the `Accept` HTTP header is not set to `application/json`, the browser\
+        \ will be redirected (HTTP 303 See Other) to the `return_to` parameter of\
+        \ the initial request or fall back to `urls.default_return_to`.\n\nIf the\
+        \ `Accept` HTTP header is set to `application/json`, a 204 No Content response\
+        \ will be sent on successful logout instead.\n\nThis endpoint is NOT INTENDED\
+        \ for API clients and only works\nwith browsers (Chrome, Firefox, ...). For\
+        \ API clients you can\ncall the `/self-service/logout/api` URL directly with\
+        \ the Ory Session Token."
+      operationId: bouncer:logout:browser
+      parameters:
+      - description: "A Valid Logout Token\n\nIf you do not have a logout token because\
+          \ you only have a session cookie,\ncall `/self-service/logout/browser`"
+        explode: true
+        in: query
+        name: token
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: The URL to return to after the logout was completed.
+        in: query
+        name: return_to
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "204":
+          description: Logout succesfull
+        "303":
+          description: Redirection after successfull logout
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: Internal Server Error
+      servers:
+      - url: "https://auth.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: Submit Browser Logout
+      tags:
+      - authentication
+      x-accepts: application/json
+  /user:
+    delete:
+      description: "This endpoints deletes all individual user data and settings.\n\
+        \nOn the next request of an authenticated user, the data with default values\
+        \ will become reinitialized.\n\nOn success, the endpoint returns a `204 No\
+        \ Content` response with no body."
+      operationId: user:data:delete
+      responses:
+        "204":
+          description: User data deleted.
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Delete data of the authenticated user
+      tags:
+      - user-service
+    get:
+      description: |-
+        Get the data of the currently logged in user.
+
+        Data are initialized on first request with default values or are empty.
+      operationId: user:data:get
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDataResponse'
+          description: OK
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Get data of current user
+      tags:
+      - user-service
+      x-accepts: application/json
+      x-tira: true
+    put:
+      operationId: user:data:update
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserModel'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDataResponse'
+          description: User data successfully updated. Returns the new user data object
+            with changes applied
+        "401":
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Unprocessable entity. Validation of request body failed.
+        "500":
+          description: Internal server error
+      security:
+      - jwt: []
+      summary: Update data of the authenticated user
+      tags:
+      - user-service
+      x-accepts: application/json
+      x-contentType: application/json
+    servers:
+    - url: "https://users.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /admin/user:
+    get:
+      deprecated: true
+      description: |-
+        This endpoint returns all users with settings stored.
+
+        The endpoint is only accessible by administrators and considered **unstable**.
+      operationId: user:admin:getAll
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserModel'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/UserDataResponse'
+                type: array
+          description: User successfully created
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      summary: Get all users.
+      tags:
+      - user-service
+      x-accepts: application/json
+    post:
+      deprecated: true
+      description: "Creates a user with provided request data.\n\nThe ID comes from\
+        \ a header that will be dropped by the API gateway. Therefore, user creation\
+        \ is only\naccessible from inside the service mesh.\n\nThe endpoint is only\
+        \ accessible by administrators and considered **unstable**."
+      operationId: user:admin:create
+      parameters:
+      - description: |-
+          The service specific user id of the user to create.
+
+          **Caution:**
+          The user id MUST NOT be the users account key nor a authentication session token.
+        example: 7f036688-36c2-4d73-80c7-a820fcf156a6
+        in: header
+        name: X-User-Id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserModel'
+      responses:
+        "200":
+          description: OK
+        "201":
+          description: Created
+        "401":
+          description: Unauthorized
+        "422":
+          description: Unprocessable Entity
+        "500":
+          description: Internal Server Error
+      summary: Create user.
+      tags:
+      - user-service
+      x-contentType: application/json
+    servers:
+    - url: "https://users.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /diary:
+    get:
+      description: Get the mood diary for the currently authenticated user.
+      operationId: diary:mood:getMany
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/moodList'
+          description: OK
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Get mood diary by userId.
+      tags:
+      - mood-diary-service
+      x-accepts: application/json
+      x-tira: true
+    post:
+      description: Add mood to user's diary.
+      operationId: diary:mood:create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/moodData'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mood'
+          description: Created
+        "401":
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError_1'
+          description: |-
+            Unprocessable entity.
+
+            The request data validation failed.
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Add mood to diary
+      tags:
+      - mood-diary-service
+      x-contentType: application/json
+      x-accepts: application/json
+      x-tira: true
+    servers:
+    - url: "https://diary.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /diary/{id}:
+    delete:
+      description: |-
+        Use this endpoint to delete a single entry from a users mood diary by it's userId.
+
+        On success a `204 No Content` response with body is returned.
+      operationId: diary:mood:delete
+      parameters:
+      - description: ID of the mood diary entry the user wants to perform a request
+          on
+        example: 2143
+        in: path
+        name: id
+        required: true
+        schema:
+          nullable: false
+          type: integer
+      responses:
+        "204":
+          description: Mood diary entry deleted successfully.
+        "401":
+          description: Unauthorized
+        "404":
+          description: Mood diary entry with provided id not found
+        "500":
+          description: Internal server error
+      security:
+      - jwt: []
+      summary: Delete single mood diary entry
+      tags:
+      - mood-diary-service
+      x-tira: true
+    get:
+      description: "Endpoint returns a single moodd diary entry by it's ID (passed\
+        \ as an URL parameter)\n\nIf the user is not authenticated at all, the endpoint\
+        \ will return `401 Forbidden`.\n\nIf the user is authenticated, tries to access\
+        \ an mood diary entry that does not exists or not belongs to them, a `404\
+        \ Not Found` is returned.\nparameters:"
+      operationId: diary:mood:get
+      parameters:
+      - description: ID of the mood diary entry the user wants to perform a request
+          on
+        example: 2143
+        in: path
+        name: id
+        required: true
+        schema:
+          nullable: false
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mood'
+          description: Success
+        "401":
+          description: Unauthorized
+        "404":
+          description: Mood diary entry with provided id not found
+        "500":
+          description: Internal server error
+      security:
+      - jwt: []
+      summary: Fetch single mood diary entry
+      tags:
+      - mood-diary-service
+      x-tira: true
+    put:
+      description: "Use this endpoint to update a mood diary entry.\n\nYou have to\
+        \ provide a full Mood Data Object. On success, a `204 No Content` response\
+        \ with body is returned.\n\nIf the provided request body is invalid, a `422\
+        \ Unprocessable Entity` error is returned."
+      operationId: diary:mood:update
+      parameters:
+      - description: ID of the mood diary entry the user wants to perform a request
+          on
+        example: 2143
+        in: path
+        name: id
+        required: true
+        schema:
+          nullable: false
+          type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/moodData'
+      responses:
+        "204":
+          description: Mood diary entry updated successfully.
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError_1'
+          description: |-
+            Unprocessable entity.
+
+            The request data validation failed.
+        "401":
+          description: Unauthorized
+        "404":
+          description: Mood diary entry with provided id not found
+        "500":
+          description: Internal server error
+      security:
+      - jwt: []
+      summary: Update a single mood diary entry
+      tags:
+      - mood-diary-service
+      x-tira: true
+    servers:
+    - url: "https://diary.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /motivator:
+    get:
+      description: "This endpoint returns all motivators that should be available\
+        \ to the user in the frontend.\n\nA *motivator* is a generic exercise, that\
+        \ displays different type of contexts and eventually offers input elements. "
+      operationId: motivator:get
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MotivatorList'
+          description: "OK. A list of avaiable motivator exercises for the currently\
+            \ authenticated user is returned.\n\nThe content to display is presented\
+            \ in `content` as ordered array. Each element should be displayed in the\
+            \ order of occurence in the array.\n\nIf a content object has the type\
+            \ input, it returns an `id` of an input object presented in `inputs`.\
+            \ Each input object offers one or more so called fields. A field is an\
+            \ individual, configurable input type. You can think of an input as a\
+            \ HTML form, which also consists out of multiple input elements and then\
+            \ submits all user inputs to the server.\n\nSee the `POST /motivator/result`\
+            \ endpoint on how to send user inputs to the server."
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Get motivators for authenticated user
+      tags:
+      - motivator-service
+    servers:
+    - url: "https://motivator.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /motivator/{motivatorId}/result:
+    delete:
+      description: |-
+        This endpoint deletes **all** results on the motivator with the ID specified for a given motivator for the currently authenticated user.
+
+        - On success it returns a `204 No content` response without a body.
+
+        - If the motivator with the ID does not exists a `404 Not Found` response is returned.
+      operationId: motivator:result:deleteAll
+      parameters:
+      - description: The ID of the motivator to fetch users results
+        in: path
+        name: motivatorId
+        required: true
+        schema:
+          type: integer
+      responses:
+        "204":
+          description: Results for motivator with `motivatorId` deletes successfully.
+        "404":
+          description: The motivator with the given `motivatorId` does not exists.
+        "500":
+          description: Internal Service Error
+      security:
+      - jwt: []
+      summary: Deletes all results on a motivator for the user
+      tags:
+      - motivator-service
+    post:
+      description: "This endpoint submits a users result on a motivator exercise.\n\
+        \nA result is basically an array of collected users inputs according to the\
+        \ motivator specification provided by the `GET /motivator` endpoint.\n\nThe\
+        \ user can also submit optional feedback on a motivator with a result response.\
+        \ As collection of free-text comments as part of an evaluation is very sensitive\
+        \ in terms of privacy, this version of the API does not include such an option.\n\
+        \nOn success, the endpoint returns a `201 Created` response, with the body\
+        \ containing the `id` of the motivator result and a new `state` for the motivator\
+        \ exercises, as a motivator could consist out of multiple parts. If the return\
+        \ value indicates that a motivator is not fully completed, you should call\
+        \ the `GET` endpoint again, as the content the motivator could have changed.\n\
+        \nIf the motivator does not exists or is not available for the current user,\
+        \ a `404 Not Found` response is returned.\n\nIf the validation of the request\
+        \ body against the specified schema fails, or does not match the actual inputs\
+        \ of the motivator, a `422 Unprocessable Entity` response is returned, with\
+        \ the body containing an `error` string with further information."
+      operationId: motivator:result:add
+      parameters:
+      - description: The `id` of the motivator you want to add a result for.
+        in: path
+        name: motivatorId
+        required: true
+        schema:
+          $ref: '#/components/schemas/MotivatorId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MotivatorResult'
+        description: "The result to submit on the motivator. \n\nThe `values` property\
+          \ acts as a dictionary, containing the IDs referenced in the `input` object\
+          \ in the motivator content. \n\nThe coressponding value, again is a dictionary\
+          \ of mapping the reference string to objects containing a single `value`\
+          \ property. \n\nThe type of `value` depends on the individual input type."
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MotivatorResultCreatedResponse'
+          description: Motivator Result stored successfully.
+        "401":
+          description: Unauthorized
+        "404":
+          description: Motivator with request `motivatorId` does not exists or is
+            not available to the currently authorized user.
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MotivatorValidationError'
+          description: Validation of the request body failed
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Add a new result to user's current motivator.
+      tags:
+      - motivator-service
+    servers:
+    - url: "https://motivator.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /safetyNet:
+    get:
+      description: "This endpoint returns the current users safety net. A safetyNet\
+        \ is an an array of items. How the safety net items are displayed in the UI\
+        \ is left to the user. \n\nThis endpoint is associated with the motivator\
+        \ service, as it's implemented as a motivator exercise internally. However,\
+        \ the safety net motivator is shown in the `GET /motivator` endpoint."
+      operationId: motivator:safetyNet:get
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafetyNet'
+          description: OK
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Get safety net for the current user
+      tags:
+      - motivator-service
+      x-accepts: application/json
+    post:
+      description: "Add safety net item to currently authenticated user safety net.\n\
+        \nIf the item was added to the users safety net, a `201 Created` response,\
+        \ with the created Item in the body (this contains an `id`).\n\nIf the validation\
+        \ if the requests body fails, a `422 Unprocessable Entity` error is returned,\
+        \ with an error message in the body."
+      operationId: motivator:safetyNet:add
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SafetyNetItemContent'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafetyNetItem'
+          description: Item succesfully added to users safety net.
+        "401":
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MotivatorValidationError'
+          description: Request entity validation failed.
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Add safety net item to currently authenticated user safety net.
+      tags:
+      - motivator-service
+      x-accepts: application/json
+      x-contentType: application/json
+    servers:
+    - url: "https://motivator.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /safetyNet/{safetyNetItemId}:
+    delete:
+      description: "This endpoint deletes an item with the specified `id` from the\
+        \ currently authenticated users safety net.\n\n- If the deletion was successful,\
+        \ a `204 No Content` response without body is returned.\n\n- If there is no\
+        \ safety net item with the given `id` for the current user, it returns a `404\
+        \ Not Found` response"
+      operationId: motivator:safetyNet:delete
+      parameters:
+      - in: path
+        name: safetyNetItemId
+        required: true
+        schema:
+          example: 5421
+          type: integer
+      responses:
+        "204":
+          description: Item deleted succesfully
+        "401":
+          description: Unauthorized
+        "404":
+          description: Item with provided `safetyNetItemId` does not exists for current
+            user.
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Deletes an item from users safety net
+      tags:
+      - motivator-service
+    put:
+      description: "This endpoint replaces the item with the provided `safetyNetItemId`\
+        \ with the data provided in the request body.\n\nOn successful replacement,\
+        \ a `200 OK` reponse is returned, with the new record provided in the reponse\
+        \ body.\n\nIf the deletion was successful, a `204 No Content` response without\
+        \ body is returned.\n\nIf the validation if the requests body fails, a `422\
+        \ Unprocessable Entity` error is returned, with an error message in the body."
+      operationId: motivator:safetyNet:replace
+      parameters:
+      - in: path
+        name: safetyNetItemId
+        required: true
+        schema:
+          example: 5421
+          type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SafetyNetItemContent'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafetyNetItem'
+          description: Safety net item successfully updated
+        "401":
+          description: Unauthorized
+        "404":
+          description: Item with provided `safetyNetItemId` does not exists for current
+            user.
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MotivatorValidationError'
+          description: Request entity validation failed.
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      summary: Replaces a safety net item with a new one
+      tags:
+      - motivator-service
+    servers:
+    - url: "https://motivator.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /tilt:
+    get:
+      description: "Get tilt document, i.e. a machine-readable privacy policy."
+      operationId: get-tilt
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/schema'
+          description: OK
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      summary: Get tilt document.
+      tags:
+      - tilt-service
+      x-accepts: application/json
+      x-tira: false
+    post:
+      description: "Set tilt document, i.e. a machine-readable privacy policy."
+      operationId: post-tilt
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/schema'
+      responses:
+        "200":
+          description: OK
+        "201":
+          description: Created
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      summary: Set tilt document.
+      tags:
+      - tilt-service
+      x-contentType: application/json
+    servers:
+    - url: "https://tilt.api.{environment}.mindtastic.lol"
+      variables:
+        environment:
+          default: live
+          enum:
+          - live
+          - stage
+          - dev
+  /wiki:
+    get:
+      description: "This endpoint returns a list of multiple wiki entries. \n\nYou\
+        \ can use the `query` parameter to perform a fulltext search on `title` and\
+        \ `content`.\n\nBy default max. 20 WikiEntrys will be in the response. To\
+        \ fetch more, it's recommended to perform multiple queries (API Pagination).\
+        \ Use the `limit` and `offset` parameters."
+      operationId: wiki:list
+      parameters:
+      - in: query
+        name: query
+        required: false
+        schema:
+          title: Fulltext Search Query
+          type: string
+      - description: The maximum number of articles the response will include (Use
+          together with `offset` for api pagination).
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 20
+          minimum: 1
+          title: Article Limit
+          type: integer
+      - description: The number of articles that will we skipped in response (Use
+          together wuth `limit` for api pagination).
+        in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          title: Article Offset
+          type: integer
+      - description: "If the with content attribute is not `true`, the response will\
+          \ not return the content of wiki articles, but only the title and metadata\
+          \ attributes.\n\n*Note*:\nThis behaviour is not implemented yet, but It\
+          \ will be later. This endpoint can be used to download an index of all articles,\
+          \ without having to download the article content. The metadata might also\
+          \ contain a `preview` field with the first few character of each article\
+          \ in a later persion of the spec. \n\nAs adding the parameter later would\
+          \ be a breaking spec, always send the with_content parameter if you actually\
+          \ want to fetch article contents."
+        in: query
+        name: with_content
+        required: false
+        schema:
+          default: false
+          type: boolean
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/wiki_list_200_response'
+          description: Success
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError_2'
+          description: Invalid request parameters we're provided
+        "500":
+          description: Internal Server Error
+      servers:
+      - url: "https://wiki.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: Fetch wiki entries
+      tags:
+      - wiki-service
+      x-contentType: application/json
+  /wiki/{articleId}:
+    get:
+      deprecated: true
+      description: |-
+        This article can be used to fetch a single wiki entry.
+
+        It is not implemented yet and therefore marked as deprecated
+      operationId: wiki:get
+      parameters:
+      - description: ID of a wiki entry
+        example: 62bda938ada05ab5872edea7
+        in: path
+        name: articleId
+        required: true
+        schema:
+          maxLength: 24
+          minLength: 24
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WikiEntry'
+          description: OK
+        "404":
+          description: Not found
+        "500":
+          description: Internal Server Error
+      servers:
+      - url: "https://wiki.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: Fetch single wiki entry
+      tags:
+      - wiki-service
+      x-accepts: application/json
+  /admin/wiki:
+    post:
+      description: Add wiki entries
+      operationId: wiki:create-entry
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEntryBody'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WikiEntry'
+          description: Wiki Article created. It returns the newly inserted WikiEntry
+            with timestamps and id.
+        "401":
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError_2'
+          description: Invalid request body
+        "500":
+          description: Internal Server Error
+      security:
+      - jwt: []
+      servers:
+      - url: "https://wiki.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: Add new wiki entries
+      tags:
+      - wiki-service
+      x-tira: false
+      x-accepts: application/json
+      x-contentType: application/json
+  /admin/wiki/{articleId}:
+    delete:
+      operationId: wiki:delete-entry
+      parameters:
+      - description: ID of a wiki entry
+        example: 62bda938ada05ab5872edea7
+        in: path
+        name: articleId
+        required: true
+        schema:
+          maxLength: 24
+          minLength: 24
+          type: string
+      responses:
+        "204":
+          description: Deletion successfull.
+        "401":
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError_2'
+          description: Invalid wikiEntryId provided
+        "500":
+          description: Internal server error
+      security:
+      - jwt: []
+      servers:
+      - url: "https://wiki.api.{environment}.mindtastic.lol"
+        variables:
+          environment:
+            default: live
+            enum:
+            - live
+            - stage
+            - dev
+      summary: Delete wiki entry by id.
+      tags:
+      - wiki-service
+components:
+  headers: {}
+  parameters: {}
+  requestBodies:
+    browserFlowSubmitBody:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/bouncer_register_request'
+      description: "Providing `csrf_token` is only required for browser flows. For\
+        \ API flows, request body can left empty."
+  responses: {}
+  schemas:
+    apiRegistrationFlow:
+      allOf:
+      - $ref: '#/components/schemas/apiRegistraionFlowExample'
+      - $ref: '#/components/schemas/selfServiceRegistrationFlow'
+    apiRegistraionFlowExample:
+      allOf:
+      - $ref: '#/components/schemas/apiBaseFlowExample'
+      - example:
+          request_url: http://auth.api.live.mindtastic.lol/self-service/registration/api
+          ui:
+            action: https://auth.api.live.mindtastic.lol/self-service/registration?flow=9d7646c2-52b4-4c1f-a9b0-ec7b9e328cd6
+            nodes:
+            - allOf:
+              - $ref: '#/flowExampleCSRFNode'
+            - allOf:
+              - $ref: '#/flowExampleAccountKeyNode'
+            - '...'
+    apiBaseFlowExample:
+      allOf:
+      - $ref: '#/components/schemas/baseFlowExample'
+      - example:
+          id: 9d7646c2-52b4-4c1f-a9b0-ec7b9e328cd6
+          type: api
+    baseFlowExample:
+      example:
+        id: 7fc68104-1e4d-4eba-bd57-7ee84431c134
+        type: "Error in Spec: Abstract base type used"
+        expires_at: 2022-07-01T08:05:46.233962679Z
+        issued_at: 2022-07-01T07:50:46.233962679Z
+        request_url: "Error in Spec: Abstract base type used"
+        ui:
+          action: "Error in Spec: Abstract base type used"
+          method: POST
+          messages: []
+        created_at: 2022-06-30T07:50:46.233962679Z
+        updated_at: 2022-06-30T07:50:46.233962679Z
+    selfServiceRegistrationFlow:
+      properties:
+        active:
+          $ref: '#/components/schemas/identityCredentialsType'
+        expires_at:
+          description: "ExpiresAt is the time (UTC) when the flow expires. If the\
+            \ user still wishes to log in,\na new flow has to be initiated."
+          format: date-time
+          type: string
+        id:
+          format: uuid4
+          type: string
+        issued_at:
+          description: IssuedAt is the time (UTC) when the flow occurred.
+          format: date-time
+          type: string
+        request_url:
+          description: |-
+            RequestURL is the initial URL that was requested from Ory Kratos. It can be used
+            to forward information contained in the URL's path or query for example.
+          type: string
+        return_to:
+          description: ReturnTo contains the requested return_to URL.
+          type: string
+        type:
+          description: The flow type can either be `api` or `browser`.
+          title: Type is the flow type.
+          type: string
+        ui:
+          $ref: '#/components/schemas/uiContainer'
+      required:
+      - expires_at
+      - id
+      - issued_at
+      - request_url
+      - type
+      - ui
+      type: object
+    identityCredentialsType:
+      description: and so on.
+      enum:
+      - password
+      - totp
+      - oidc
+      - webauthn
+      - lookup_secret
+      title: "CredentialsType  represents several different credential types, like\
+        \ password credentials, passwordless credentials,"
+      type: string
+    UUID:
+      format: uuid4
+      type: string
+    uiContainer:
+      description: Container represents a HTML Form. The container can work with both
+        HTTP Form and JSON requests
+      example:
+        nodes:
+        - meta:
+            label:
+              context: "{}"
+              id: 0
+              text: text
+              type: type
+          messages:
+          - context: "{}"
+            id: 0
+            text: text
+            type: type
+          - context: "{}"
+            id: 0
+            text: text
+            type: type
+          type: text
+          group: default
+        - meta:
+            label:
+              context: "{}"
+              id: 0
+              text: text
+              type: type
+          messages:
+          - context: "{}"
+            id: 0
+            text: text
+            type: type
+          - context: "{}"
+            id: 0
+            text: text
+            type: type
+          type: text
+          group: default
+        method: method
+        action: action
+        messages:
+        - context: "{}"
+          id: 0
+          text: text
+          type: type
+        - context: "{}"
+          id: 0
+          text: text
+          type: type
+      properties:
+        action:
+          description: "Action should be used as the form action URL `<form action=\"\
+            {{ .Action }}\" method=\"post\">`."
+          type: string
+        messages:
+          items:
+            $ref: '#/components/schemas/uiText'
+          type: array
+        method:
+          description: Method is the form method (e.g. POST)
+          type: string
+        nodes:
+          items:
+            $ref: '#/components/schemas/uiNode'
+          type: array
+      required:
+      - action
+      - method
+      - nodes
+      type: object
+    uiText:
+      example:
+        context: "{}"
+        id: 0
+        text: text
+        type: type
+      properties:
+        context:
+          description: The message's context. Useful when customizing messages.
+          type: object
+        id:
+          format: int64
+          type: integer
+        text:
+          description: The message text. Written in american english.
+          type: string
+        type:
+          type: string
+      required:
+      - id
+      - text
+      - type
+      type: object
+    uiNode:
+      description: "Nodes are represented as HTML elements or their native UI equivalents.\
+        \ For example,\na node can be an `<img>` tag, or an `<input element>` but\
+        \ also `some plain text`."
+      example:
+        meta:
+          label:
+            context: "{}"
+            id: 0
+            text: text
+            type: type
+        messages:
+        - context: "{}"
+          id: 0
+          text: text
+          type: type
+        - context: "{}"
+          id: 0
+          text: text
+          type: type
+        type: text
+        group: default
+      properties:
+        attributes:
+          $ref: '#/components/schemas/uiNodeAttributes'
+        group:
+          description: Group specifies which group (e.g. password authenticator) this
+            node belongs to.
+          enum:
+          - default
+          - password
+          - oidc
+          - profile
+          - link
+          - totp
+          - lookup_secret
+          - webauthn
+          type: string
+        messages:
+          items:
+            $ref: '#/components/schemas/uiText'
+          type: array
+        meta:
+          $ref: '#/components/schemas/uiNodeMeta'
+        type:
+          description: The node's type
+          enum:
+          - text
+          - input
+          - img
+          - a
+          - script
+          type: string
+      required:
+      - attributes
+      - group
+      - messages
+      - meta
+      - type
+      title: Node represents a flow's nodes
+      type: object
+    uiNodeAttributes:
+      discriminator:
+        mapping:
+          a: '#/components/schemas/uiNodeAnchorAttributes'
+          img: '#/components/schemas/uiNodeImageAttributes'
+          input: '#/components/schemas/uiNodeInputAttributes'
+          script: '#/components/schemas/uiNodeScriptAttributes'
+          text: '#/components/schemas/uiNodeTextAttributes'
+        propertyName: node_type
+      oneOf:
+      - $ref: '#/components/schemas/uiNodeInputAttributes'
+      - $ref: '#/components/schemas/uiNodeTextAttributes'
+      - $ref: '#/components/schemas/uiNodeImageAttributes'
+      - $ref: '#/components/schemas/uiNodeAnchorAttributes'
+      - $ref: '#/components/schemas/uiNodeScriptAttributes'
+      title: Attributes represents a list of attributes (e.g. `href="foo"` for links).
+    uiNodeInputAttributes:
+      description: InputAttributes represents the attributes of an input node
+      properties:
+        disabled:
+          description: Sets the input's disabled field to true or false.
+          type: boolean
+        label:
+          $ref: '#/components/schemas/uiText'
+        name:
+          description: The input's element name.
+          type: string
+        node_type:
+          description: |-
+            NodeType represents this node's types. It is a mirror of `node.type` and
+            is primarily used to allow compatibility with OpenAPI 3.0.  In this struct it technically always is "input".
+          type: string
+        onclick:
+          description: |-
+            OnClick may contain javascript which should be executed on click. This is primarily
+            used for WebAuthn.
+          type: string
+        pattern:
+          description: The input's pattern.
+          type: string
+        required:
+          description: Mark this input field as required.
+          type: boolean
+        type:
+          type: string
+        value:
+          description: The input's value.
+          nullable: true
+      required:
+      - disabled
+      - name
+      - node_type
+      - type
+      type: object
+    uiNodeTextAttributes:
+      properties:
+        id:
+          description: A unique identifier
+          type: string
+        node_type:
+          description: |-
+            NodeType represents this node's types. It is a mirror of `node.type` and
+            is primarily used to allow compatibility with OpenAPI 3.0.  In this struct it technically always is "text".
+          type: string
+        text:
+          $ref: '#/components/schemas/uiText'
+      required:
+      - id
+      - node_type
+      - text
+      title: TextAttributes represents the attributes of a text node.
+      type: object
+    uiNodeImageAttributes:
+      properties:
+        height:
+          description: Height of the image
+          format: int64
+          type: integer
+        id:
+          description: A unique identifier
+          type: string
+        node_type:
+          description: |-
+            NodeType represents this node's types. It is a mirror of `node.type` and
+            is primarily used to allow compatibility with OpenAPI 3.0.  In this struct it technically always is "img".
+          type: string
+        src:
+          description: "The image's source URL.\nformat: uri"
+          type: string
+        width:
+          description: Width of the image
+          format: int64
+          type: integer
+      required:
+      - height
+      - id
+      - node_type
+      - src
+      - width
+      title: ImageAttributes represents the attributes of an image node.
+      type: object
+    uiNodeAnchorAttributes:
+      properties:
+        href:
+          description: "The link's href (destination) URL.\nformat: uri"
+          type: string
+        id:
+          description: A unique identifier
+          type: string
+        node_type:
+          description: |-
+            NodeType represents this node's types. It is a mirror of `node.type` and
+            is primarily used to allow compatibility with OpenAPI 3.0.  In this struct it technically always is "a".
+          type: string
+        title:
+          $ref: '#/components/schemas/uiText'
+      required:
+      - href
+      - id
+      - node_type
+      - title
+      title: AnchorAttributes represents the attributes of an anchor node.
+      type: object
+    uiNodeScriptAttributes:
+      properties:
+        async:
+          description: The script async type
+          type: boolean
+        crossorigin:
+          description: The script cross origin policy
+          type: string
+        id:
+          description: A unique identifier
+          type: string
+        integrity:
+          description: The script's integrity hash
+          type: string
+        node_type:
+          description: |-
+            NodeType represents this node's types. It is a mirror of `node.type` and
+            is primarily used to allow compatibility with OpenAPI 3.0. In this struct it technically always is "script".
+          type: string
+        nonce:
+          description: |-
+            Nonce for CSP
+            A nonce you may want to use to improve your Content Security Policy.
+            You do not have to use this value but if you want to improve your CSP
+            policies you may use it. You can also choose to use your own nonce value!
+          type: string
+        referrerpolicy:
+          description: The script referrer policy
+          type: string
+        src:
+          description: The script source
+          type: string
+        type:
+          description: The script MIME type
+          type: string
+      required:
+      - async
+      - crossorigin
+      - id
+      - integrity
+      - node_type
+      - nonce
+      - referrerpolicy
+      - src
+      - type
+      title: ScriptAttributes represent script nodes which load javascript.
+      type: object
+    uiNodeMeta:
+      description: |-
+        This might include a label and other information that can optionally
+        be used to render UIs.
+      example:
+        label:
+          context: "{}"
+          id: 0
+          text: text
+          type: type
+      properties:
+        label:
+          $ref: '#/components/schemas/uiText'
+      title: A Node's Meta Information
+      type: object
+    jsonError:
+      description: The standard Ory JSON API error format.
+      properties:
+        error:
+          $ref: '#/components/schemas/genericError'
+      required:
+      - error
+      title: Kratos API JSON Error Response
+      type: object
+    genericError:
+      properties:
+        code:
+          description: The status code
+          example: 404
+          format: int64
+          type: integer
+        debug:
+          description: |-
+            Debug information
+            This field is often not exposed to protect against leaking
+            sensitive information.
+          example: SQL field "foo" is not a bool.
+          type: string
+        details:
+          additionalProperties: false
+          description: Further error details
+          type: object
+        id:
+          description: |-
+            The error ID
+            Useful when trying to identify various errors in application logic.
+          type: string
+        message:
+          description: |-
+            Error message
+            The error's message.
+          example: The resource could not be found
+          type: string
+        reason:
+          description: A human-readable reason for the error
+          example: User with ID 1234 does not exist.
+          type: string
+        request:
+          description: |-
+            The request ID
+            The request ID is often exposed internally in order to trace
+            errors across service architectures. This is often a UUID.
+          example: d7ef54b1-ec15-46e6-bccb-524b82c035e6
+          type: string
+        status:
+          description: The status description
+          example: Not Found
+          type: string
+      required:
+      - message
+      type: object
+    browserRegistrationFlow:
+      allOf:
+      - $ref: '#/components/schemas/browserRegistrationFlowExample'
+      - $ref: '#/components/schemas/selfServiceRegistrationFlow'
+    browserRegistrationFlowExample:
+      allOf:
+      - $ref: '#/components/schemas/browserBaseFlowExample'
+      - example:
+          request_url: http://auth.api.live.mindtastic.lol/self-service/registration/browser
+          ui:
+            action: https://auth.api.live.mindtastic.lol/self-service/registration?flow=2e1a12cd-6d01-4f5a-b0db-2ea60b99d5ea
+            nodes:
+            - allOf:
+              - $ref: '#/flowExampleCSRFNode'
+            - allOf:
+              - $ref: '#/flowExampleAccountKeyNode'
+            - '...'
+    browserBaseFlowExample:
+      allOf:
+      - $ref: '#/components/schemas/baseFlowExample'
+      - example:
+          id: 2e1a12cd-6d01-4f5a-b0db-2ea60b99d5ea
+          type: browser
+    registration-with-flow-id-response:
+      description: Registration with FlowID
+      example:
+        session_token: 0af2da11-687d-4447-a3f4-2f39d57fe83b
+        identity:
+          id: d653ee8a-b542-4c50-a570-42414dafd076
+          schema_id: user
+          schema_url: https://auth.api.live.mindtastic.lol/schemas/dXNlcg
+          state: active
+          state_changed_at: 2022-07-01T07:48:20.909705863Z
+          traits:
+            accountKey: 48275d7f-e317-23d9-60d8-0ea0f6995058
+          created_at: 2022-07-01T07:48:20.912202Z
+          updated:at: 2022-07-01T07:48:20.912202Z
+        session:
+          id: 4fb42e7e-b3f1-44f7-b583-0485cda03c92
+          active: true
+          expires_at: 2022-07-02T07:48:20.921174998Z
+          authenticated_at: 2022-07-01T07:48:20.922137995Z
+          authenticator_assurance_level: aal1
+          authentication_methods:
+            type: array
+            items:
+            - method: password
+              aal: aal1
+              completed_at: 2022-07-01T07:48:20.921344603Z
+          issued_at: 2022-07-01T07:48:20.921174998Z
+          identity:
+            $ref: '#/identity/example'
+      properties:
+        identity:
+          $ref: '#/components/schemas/identity'
+        session:
+          $ref: '#/components/schemas/session_1'
+        session_token:
+          description: "The Session Token\n\nA session token is equivalent to a session\
+            \ cookie, but it can be sent in the HTTP Authorization\n\nHeader:\nAuthorization:\
+            \ bearer ${session-token}\nThe session token is only issued for API flows,\
+            \ not for Browser flows!"
+          example: 0af2da11-687d-4447-a3f4-2f39d57fe83b
+          type: string
+      title: Registration Response
+      type: object
+    apiLoginFlow:
+      allOf:
+      - $ref: '#/components/schemas/apiLoginFlowExample'
+      - $ref: '#/components/schemas/selfServiceLoginFlow'
+    apiLoginFlowExample:
+      allOf:
+      - $ref: '#/components/schemas/apiBaseFlowExample'
+      - example:
+          request_url: http://auth.api.dev.mindtastic.lol/self-service/login/api
+          ui:
+            action: https://auth.api.dev.mindtastic.lol/self-service/login?flow=dae01032-cdd6-4381-82f5-1f7f4d2c42c6
+            nodes:
+            - allOf:
+              - $ref: '#/flowExampleCSRFNode'
+            - '...'
+          refresh: false
+          requested_aal: aal1
+    selfServiceLoginFlow:
+      description: This object represents a login flow. A login flow is initiated
+        at the "Initiate Login API / Browser Flow"
+      properties:
+        active:
+          $ref: '#/components/schemas/identityCredentialsType'
+        created_at:
+          format: date-time
+          type: string
+        expires_at:
+          format: date-time
+          type: string
+        id:
+          format: uuid4
+          type: string
+        issued_at:
+          description: IssuedAt is the time (UTC) when the flow started.
+          format: date-time
+          type: string
+        refresh:
+          description: Refresh stores whether this login flow should enforce re-authentication.
+          type: boolean
+        request_url:
+          description: |-
+            RequestURL is the initial URL that was requested from Ory Kratos. It can be used
+            to forward information contained in the URL's path or query for example.
+          type: string
+        requested_aal:
+          $ref: '#/components/schemas/authenticatorAssuranceLevel'
+        return_to:
+          description: ReturnTo contains the requested return_to URL.
+          type: string
+        type:
+          description: The flow type can either be `api` or `browser`.
+          title: Type is the flow type.
+          type: string
+        ui:
+          $ref: '#/components/schemas/uiContainer'
+        updated_at:
+          description: UpdatedAt is a helper struct field for gobuffalo.pop.
+          format: date-time
+          type: string
+      required:
+      - expires_at
+      - id
+      - issued_at
+      - request_url
+      - type
+      - ui
+      title: Login Flow
+      type: object
+    authenticatorAssuranceLevel:
+      description: Internal value used by Ory Kratos. Not relevant for the Kopfsachen
+        API
+      enum:
+      - aal0
+      - aal1
+      - aal2
+      - aal3
+      title: Authentication Assurance Level (AAL)
+      type: string
+    browserLoginFlow:
+      allOf:
+      - $ref: '#/components/schemas/browserLoginFlowExample'
+      - $ref: '#/components/schemas/selfServiceLoginFlow'
+    browserLoginFlowExample:
+      allOf:
+      - $ref: '#/components/schemas/browserBaseFlowExample'
+      - example:
+          request_url: http://auth.api.live.mindtastic.lol/self-service/login/browser
+          ui:
+            action: https://auth.api.live.mindtastic.lol/self-service/login?flow=bedd058f-61bb-44de-a6b3-10fccccfd8f8
+            nodes:
+            - allOf:
+              - $ref: '#/flowExampleCSRFNode'
+            - '...'
+    session:
+      example:
+        session:
+          id: 4fb42e7e-b3f1-44f7-b583-0485cda03c92
+          active: true
+          expires_at: 2022-07-02T07:48:20.921174998Z
+          authenticated_at: 2022-07-01T07:48:20.922137995Z
+          authenticator_assurance_level: aal1
+          authentication_methods:
+            type: array
+            items:
+            - method: password
+              aal: aal1
+              completed_at: 2022-07-01T07:48:20.921344603Z
+          issued_at: 2022-07-01T07:48:20.921174998Z
+          identity:
+            $ref: '#/identity/example'
+      properties:
+        session:
+          $ref: '#/components/schemas/session_1'
+      title: Bouncer API Session
+      type: object
+    selfServiceBrowserLocationChangeRequiredError:
+      properties:
+        code:
+          description: The status code
+          example: 404
+          format: int64
+          type: integer
+        debug:
+          description: |-
+            Debug information
+            This field is often not exposed to protect against leaking
+            sensitive information.
+          example: SQL field "foo" is not a bool.
+          type: string
+        details:
+          additionalProperties: true
+          description: Further error details
+          type: object
+        id:
+          description: |-
+            The error ID
+            Useful when trying to identify various errors in application logic.
+          type: string
+        message:
+          description: |-
+            Error message
+            The error's message.
+          example: The resource could not be found
+          type: string
+        reason:
+          description: A human-readable reason for the error
+          example: User with ID 1234 does not exist.
+          type: string
+        redirect_browser_to:
+          description: Since when the flow has expired
+          type: string
+        request:
+          description: |-
+            The request ID
+            The request ID is often exposed internally in order to trace
+            errors across service architectures. This is often a UUID.
+          example: d7ef54b1-ec15-46e6-bccb-524b82c035e6
+          type: string
+        status:
+          description: The status description
+          example: Not Found
+          type: string
+      required:
+      - message
+      title: Is sent when a flow requires a browser to change its location.
+      type: object
+    submitSelfServiceLogoutFlowWithoutBrowserBody:
+      description: "nolint:deadcode,unused"
+      example:
+        session_token: 25a9898c-216c-4d41-96ab-6fe07c0bf1fc
+      properties:
+        session_token:
+          description: |-
+            The Session Token
+            Invalidate this session token.
+          type: string
+      required:
+      - session_token
+      type: object
+    browserLogoutUrl:
+      example:
+        logout_url: ttps://auth.api.live.mindtastic.lol/self-service/logout?token=iYjs7NWRsQ5AwFETpMqNMrgu82iI8EAX
+        logout_token: iYjs7NWRsQ5AwFETpMqNMrgu82iI8EAX
+      properties:
+        logout_token:
+          description: LogoutToken can be used to perform logout using AJAX.
+          type: string
+        logout_url:
+          description: "LogoutURL can be opened in a browser to sign the user out.\n\
+            format: uri"
+          type: string
+      required:
+      - logout_token
+      - logout_url
+      title: Bouncer logout URL
+      type: object
+    UserDataResponse:
+      example:
+        username: maja
+        role: user
+        email: maja@example.com
+        settings:
+          language: de
+      properties:
+        username:
+          title: Username
+          type: string
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        email:
+          title: EMail Adress of user
+          type: string
+        settings:
+          $ref: '#/components/schemas/UserSettingsModel'
+      title: User Data Response
+      type: object
+    RoleEnum:
+      description: An enumeration of roles.
+      enum:
+      - admin
+      - user
+      title: RoleEnum
+      type: string
+    UserSettingsModel:
+      description: Stores the users settings
+      example:
+        language: de
+      properties:
+        language:
+          enum:
+          - de
+          - en
+          title: Users preferred language
+          type: string
+      title: User Settings
+      type: object
+    UpdateUserModel:
+      example:
+        email: maja.new@example.com
+        settings:
+          lang: de
+      properties:
+        username:
+          title: Username
+          type: string
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        email:
+          type: string
+        settings:
+          $ref: '#/components/schemas/UserSettingsModel'
+      title: UpdateUserModel
+      type: object
+    ValidationError:
+      example:
+        loc:
+        - body
+        msg: field required
+        type: value_error.missing
+      properties:
+        loc:
+          items:
+            type: string
+          title: Location
+          type: array
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+      type: object
+    moodList:
+      items:
+        $ref: '#/components/schemas/mood'
+      title: Mood List Entries
+      type: array
+    mood:
+      allOf:
+      - $ref: '#/components/schemas/moodIdObj'
+      - $ref: '#/components/schemas/moodData'
+      title: Mood Object
+      type: object
+    moodIdObj:
+      example:
+        id: 2143
+      properties:
+        id:
+          nullable: false
+          type: integer
+      required:
+      - id
+      type: object
+    moodId:
+      nullable: false
+      type: integer
+    moodData:
+      example:
+        mood_day: 2022-07-24
+        mood_type: negative
+        mood_descr: So called semester break. Lol.
+      properties:
+        mood_day:
+          description: "The date of the day the mood entry should created for. It\
+            \ expects an [`ISO 8601` / `RFC 3399` timestamp](https://datatracker.ietf.org/doc/html/rfc3339#section-5.6).\n\
+            Sending only the date part without any `time` component is also allowed,\
+            \ but not recommended, as this could change in future versions of the\
+            \ API."
+          format: date-time
+          type: string
+        mood_type:
+          enum:
+          - positive
+          - negative
+          - neutral
+          type: string
+        mood_descr:
+          type: string
+      required:
+      - mood_day
+      - mood_type
+      title: Mood Data Object
+      type: object
+    ValidationError_1:
+      example:
+        error: mood_day must be a valid ISO 8601 or RFC 2822 timestamp
+      properties:
+        error:
+          type: string
+      required:
+      - error
+      type: object
+    MotivatorList:
+      items:
+        $ref: '#/components/schemas/Motivator'
+      title: Motivator List
+      type: array
+    Motivator:
+      allOf:
+      - $ref: '#/components/schemas/MotivatorModel'
+      - $ref: '#/components/schemas/Motivator_1'
+    MotivatorModel:
+      properties:
+        id:
+          example: 5
+          type: integer
+        name:
+          example: Mindfulness motivator
+          maxLength: 255
+          minLength: 1
+          type: string
+        headline:
+          example: Calm your Headspace with Ease
+          maxLength: 255
+          minLength: 1
+          type: string
+        description:
+          example: Long read. Nobodys got time for that nowadays.
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        modified_at:
+          format: date-time
+          type: string
+      type: object
+    MotivatorId:
+      example: 5
+      type: integer
+    MotivatorContent:
+      discriminator:
+        mapping:
+          text: '#/components/schemas/textContent'
+          image: '#/components/schemas/imageContent'
+          video: '#/components/schemas/videoContent'
+          input: '#/components/schemas/inputContent'
+          pagebreak: '#/components/schemas/pageBreakContent'
+        propertyName: type
+      oneOf:
+      - $ref: '#/components/schemas/imageContent'
+      - $ref: '#/components/schemas/textContent'
+      - $ref: '#/components/schemas/pageBreakContent'
+      - $ref: '#/components/schemas/videoContent'
+      - $ref: '#/components/schemas/inputContent'
+    imageContent:
+      example:
+        type: image
+        url: https://http.cat/420
+      properties:
+        type:
+          type: string
+        url:
+          format: uri
+          type: string
+      required:
+      - type
+      - url
+      type: object
+    textContent:
+      example:
+        type: text
+        text: |-
+          # Drill Sergeant
+
+          Most definitly a *Starkmacher*.
+      properties:
+        type:
+          type: string
+        text:
+          description: The text that should be presented to the motivator user in
+            markdown format.
+          type: string
+      required:
+      - text
+      - type
+      type: object
+    pageBreakContent:
+      example:
+        type: pagebreak
+      properties:
+        type:
+          type: string
+      required:
+      - type
+      type: object
+    videoContent:
+      example:
+        type: video
+        url: https://rroll.to/riSv29
+      properties:
+        type:
+          type: string
+        url:
+          format: uri
+          type: string
+      required:
+      - type
+      - url
+      type: object
+    inputContent:
+      example:
+        type: input
+        inputId: 5
+      properties:
+        type:
+          type: string
+        inputId:
+          type: integer
+      required:
+      - inputId
+      - type
+      type: object
+    MotivatorInput:
+      properties:
+        id:
+          example: 5
+          type: integer
+        fields:
+          additionalProperties:
+            $ref: '#/components/schemas/MotivatorInputElement'
+          example:
+            text-question:
+              inputType: text
+              label: What's the elephant in the room?
+            range-rating:
+              inputType: range
+              label: On a scale from 1-10. How important is privacy engineering to
+                you?
+              options:
+                minValue: 1
+                maxValue: 10
+          type: object
+      type: object
+    MotivatorInputElement:
+      discriminator:
+        mapping:
+          text: '#/components/schemas/MotivatorTextInputElement'
+          range: '#/components/schemas/MotivatorSliderInputElement'
+        propertyName: inputType
+      oneOf:
+      - $ref: '#/components/schemas/MotivatorTextInputElement'
+      - $ref: '#/components/schemas/MotivatorSliderInputElement'
+    MotivatorTextInputElement:
+      description: |-
+        A free text input.
+
+        Tells the frontend to display an free text input field (like `<input type="text">` in HTML).
+      example:
+        inputType: text
+        label: What's the elephant in the room?
+      properties:
+        inputType:
+          type: string
+        label:
+          description: A string the input field shall be captioned with.
+          type: string
+        maxLength:
+          description: Optional value for the maximum allowed length for the text
+            input
+          type: integer
+      required:
+      - inputType
+      - label
+      type: object
+    MotivatorSliderInputElement:
+      example:
+        inputType: range
+        label: On a scale from 1-10. How important is privacy engineering to you?
+        options:
+          minValue: 1
+          maxValue: 10
+      properties:
+        inputType:
+          type: string
+        label:
+          description: A string the range input shall be captioned with
+          type: string
+        options:
+          $ref: '#/components/schemas/MotivatorSliderInputElement_options'
+      required:
+      - inputType
+      - label
+      - range
+      type: object
+    MotivatorResult:
+      example:
+        timestamp: 2022-07-02T20:43:28+0000
+        values:
+          "5":
+            entries:
+              text-question:
+                value: Cage the Elephant
+              range-rating:
+                value: "9"
+        feedback:
+          rating: positive
+      properties:
+        timestamp:
+          format: date-time
+          type: string
+        values:
+          additionalProperties:
+            $ref: '#/components/schemas/MotivatorResultEntry'
+          title: Motivator Result Items
+          type: object
+        feedback:
+          $ref: '#/components/schemas/MotivatorFeedback'
+      required:
+      - timestamp
+      - values
+      title: Motivator Result
+      type: object
+    MotivatorResultEntry:
+      properties:
+        entries:
+          additionalProperties:
+            $ref: '#/components/schemas/Motivator_Result_Item_Input_Values'
+          title: Motivator Result Item Input Values
+          type: object
+      title: Motivator Result Item
+      type: object
+    MotivatorFeedback:
+      properties:
+        rating:
+          enum:
+          - positive
+          - neutral
+          - negative
+          type: string
+      required:
+      - rating
+      type: object
+    MotivatorResultCreatedResponse:
+      allOf:
+      - $ref: '#/components/schemas/MotivatorResultCreatedResponse_allOf'
+      - $ref: '#/components/schemas/MotivatorStatus'
+    MotivatorStatus:
+      example:
+        status: success
+      properties:
+        status:
+          enum:
+          - success
+          - postponed
+          - failed
+          type: string
+      required:
+      - status
+      type: object
+    MotivatorValidationError:
+      example:
+        error: "Expected value type integer on input type range [inputId: 5, fieldRef:\
+          \ range-rating]."
+      properties:
+        error:
+          type: string
+      required:
+      - error
+      type: object
+    SafetyNet:
+      items:
+        $ref: '#/components/schemas/SafetyNetItem'
+      title: SafetyNet Object
+      type: array
+    SafetyNetItem:
+      allOf:
+      - $ref: '#/components/schemas/SafetyNetItem_allOf'
+      - $ref: '#/components/schemas/SafetyNetItemContent'
+    SafetyNetItemContent:
+      example:
+        name: Theo
+        type: pets
+        strategies:
+        - cuddle
+        - play
+        - go for a walk
+        feedback:
+          itHelped: false
+          comment: "Not helpful at all! Theo ate my homework. Now I'm going to get\
+            \ a bad grade in Latin in 6th grade. The beginning of the end. I won't\
+            \ be able to get a good degree, I won't be able to write a master's thesis\
+            \ at ISE, and I'll have take a terrible job after school. Me becoming\
+            \ a beauty influencer is all Theos fault."
+          timestamp: 2021-03-03T03:03:03.3Z
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          description: "Which kind of item is this (i.a., influences symbol in UI)?"
+          enum:
+          - personalStrengths
+          - people
+          - pets
+          - activities
+          - situationControl
+          - relaxation
+          - other
+          minLength: 1
+          type: string
+        strategies:
+          description: How can this item help the user to feel better? An array of
+            strings describing the strategies.
+          items:
+            type: string
+          type: array
+        feedback:
+          items:
+            $ref: '#/components/schemas/SafetyNetItemFeedback'
+          type: array
+      required:
+      - name
+      - strategies
+      - type
+      type: object
+    SafetyNetItemFeedback:
+      properties:
+        itHelped:
+          type: boolean
+        comment:
+          type: string
+        timestamp:
+          format: date-time
+          type: string
+      title: safetyNetItemFeedback
+      type: object
+    schema:
+      description: "A valid tilt document validates against the tilt schema: https://github.com/Transparency-Information-Language/schema/blob/master/tilt-schema.json"
+      example:
+        thirdCountryTransfers:
+        - presenceOfEnforceableRightsAndEffectiveRemedies:
+            available: true
+            description: description
+          country: country
+          appropriateGuarantees:
+            available: true
+            description: description
+          standardDataProtectionClause:
+            available: true
+            description: description
+          adequacyDecision:
+            available: true
+            description: description
+        - presenceOfEnforceableRightsAndEffectiveRemedies:
+            available: true
+            description: description
+          country: country
+          appropriateGuarantees:
+            available: true
+            description: description
+          standardDataProtectionClause:
+            available: true
+            description: description
+          adequacyDecision:
+            available: true
+            description: description
+        controller:
+          division: division
+          country: country
+          address: address
+          name: name
+          representative:
+            phone: phone
+            name: name
+            email: email
+        rightToWithdrawConsent:
+          identificationEvidences:
+          - "{}"
+          - "{}"
+          available: true
+          description: description
+          url: url
+          email: email
+        sources:
+        - sources:
+          - publiclyAvailable: true
+            description: description
+            url: url
+          - publiclyAvailable: true
+            description: description
+            url: url
+          dataCategory: dataCategory
+          _id: _id
+        - sources:
+          - publiclyAvailable: true
+            description: description
+            url: url
+          - publiclyAvailable: true
+            description: description
+            url: url
+          dataCategory: dataCategory
+          _id: _id
+        rightToRectificationOrDeletion:
+          identificationEvidences:
+          - "{}"
+          - "{}"
+          available: true
+          description: description
+          url: url
+          email: email
+        dataProtectionOfficer:
+          country: country
+          address: address
+          phone: phone
+          name: name
+          email: email
+        automatedDecisionMaking:
+          logicInvolved: logicInvolved
+          scopeAndIntendedEffects: scopeAndIntendedEffects
+          inUse: true
+        dataDisclosed:
+        - nonDisclosure:
+            obligationToProvide: true
+            consequences: consequences
+            legalRequirement: true
+            contractualRegulation: true
+          legalBases:
+          - reference: reference
+            description: description
+          - reference: reference
+            description: description
+          purposes:
+          - purpose: purpose
+            description: description
+          - purpose: purpose
+            description: description
+          recipients:
+          - division: division
+            country: country
+            address: address
+            name: name
+            category: category
+            representative:
+              phone: phone
+              name: name
+              email: email
+          - division: division
+            country: country
+            address: address
+            name: name
+            category: category
+            representative:
+              phone: phone
+              name: name
+              email: email
+          _id: _id
+          storage:
+          - legalBasisConditional:
+            - "{}"
+            - "{}"
+            purposeConditional:
+            - "{}"
+            - "{}"
+            aggregationFunction: aggregationFunction
+            temporal:
+            - description: description
+              ttl: ttl
+            - description: description
+              ttl: ttl
+          - legalBasisConditional:
+            - "{}"
+            - "{}"
+            purposeConditional:
+            - "{}"
+            - "{}"
+            aggregationFunction: aggregationFunction
+            temporal:
+            - description: description
+              ttl: ttl
+            - description: description
+              ttl: ttl
+          category: category
+          legitimateInterests:
+          - reasoning: reasoning
+            exists: true
+          - reasoning: reasoning
+            exists: true
+        - nonDisclosure:
+            obligationToProvide: true
+            consequences: consequences
+            legalRequirement: true
+            contractualRegulation: true
+          legalBases:
+          - reference: reference
+            description: description
+          - reference: reference
+            description: description
+          purposes:
+          - purpose: purpose
+            description: description
+          - purpose: purpose
+            description: description
+          recipients:
+          - division: division
+            country: country
+            address: address
+            name: name
+            category: category
+            representative:
+              phone: phone
+              name: name
+              email: email
+          - division: division
+            country: country
+            address: address
+            name: name
+            category: category
+            representative:
+              phone: phone
+              name: name
+              email: email
+          _id: _id
+          storage:
+          - legalBasisConditional:
+            - "{}"
+            - "{}"
+            purposeConditional:
+            - "{}"
+            - "{}"
+            aggregationFunction: aggregationFunction
+            temporal:
+            - description: description
+              ttl: ttl
+            - description: description
+              ttl: ttl
+          - legalBasisConditional:
+            - "{}"
+            - "{}"
+            purposeConditional:
+            - "{}"
+            - "{}"
+            aggregationFunction: aggregationFunction
+            temporal:
+            - description: description
+              ttl: ttl
+            - description: description
+              ttl: ttl
+          category: category
+          legitimateInterests:
+          - reasoning: reasoning
+            exists: true
+          - reasoning: reasoning
+            exists: true
+        rightToInformation:
+          identificationEvidences:
+          - "{}"
+          - "{}"
+          available: true
+          description: description
+          url: url
+          email: email
+        rightToDataPortability:
+          identificationEvidences:
+          - "{}"
+          - "{}"
+          available: true
+          description: description
+          url: url
+          email: email
+        accessAndDataPortability:
+          identificationEvidences:
+          - "{}"
+          - "{}"
+          dataFormats:
+          - "{}"
+          - "{}"
+          available: true
+          description: description
+          administrativeFee:
+            amount: 6.027456183070403
+            currency: currency
+          url: url
+          email: email
+        rightToComplain:
+          identificationEvidences:
+          - "{}"
+          - "{}"
+          available: true
+          description: description
+          supervisoryAuthority:
+            country: country
+            address: address
+            phone: phone
+            name: name
+            email: email
+          url: url
+          email: email
+        meta:
+          created: created
+          _hash: _hash
+          name: name
+          modified: modified
+          language: language
+          _id: _id
+          version: 0.8008281904610115
+          url: url
+          status: status
+        changesOfPurpose:
+        - plannedDateOfChange: plannedDateOfChange
+          urlOfNewVersion: urlOfNewVersion
+          description: description
+          affectedDataCategories:
+          - "{}"
+          - "{}"
+        - plannedDateOfChange: plannedDateOfChange
+          urlOfNewVersion: urlOfNewVersion
+          description: description
+          affectedDataCategories:
+          - "{}"
+          - "{}"
+      properties:
+        meta:
+          $ref: '#/components/schemas/schema_meta'
+        controller:
+          $ref: '#/components/schemas/schema_controller'
+        dataProtectionOfficer:
+          $ref: '#/components/schemas/schema_dataProtectionOfficer'
+        dataDisclosed:
+          items:
+            $ref: '#/components/schemas/schema_dataDisclosed_inner'
+          minItems: 1
+          type: array
+          uniqueItems: true
+        thirdCountryTransfers:
+          items:
+            $ref: '#/components/schemas/schema_thirdCountryTransfers_inner'
+          minItems: 1
+          type: array
+          uniqueItems: true
+        accessAndDataPortability:
+          $ref: '#/components/schemas/schema_accessAndDataPortability'
+        sources:
+          items:
+            $ref: '#/components/schemas/schema_sources_inner'
+          minItems: 1
+          type: array
+          uniqueItems: true
+        rightToInformation:
+          $ref: '#/components/schemas/schema_rightToInformation'
+        rightToRectificationOrDeletion:
+          $ref: '#/components/schemas/schema_rightToInformation'
+        rightToDataPortability:
+          $ref: '#/components/schemas/schema_rightToInformation'
+        rightToWithdrawConsent:
+          $ref: '#/components/schemas/schema_rightToInformation'
+        rightToComplain:
+          $ref: '#/components/schemas/schema_rightToComplain'
+        automatedDecisionMaking:
+          $ref: '#/components/schemas/schema_automatedDecisionMaking'
+        changesOfPurpose:
+          items:
+            $ref: '#/components/schemas/schema_changesOfPurpose_inner'
+          minItems: 1
+          type: array
+          uniqueItems: true
+      type: object
+      x-examples:
+        example-1:
+          meta:
+            _id: f1424f86-ca0f-4f0c-9438-43cc00509931
+            name: Green Company
+            created: 2020-04-03T15:53:05.929588
+            modified: 2020-04-03T15:53:05.929588
+            version: 2
+            language: de
+            status: active
+            url: https://green-bikes.de/privacy
+            _hash: be81d309088dde861ab5fc4d62d4bbfe0aeef3e3baf2f5362c1086f451f0a1e7
+          controller:
+            name: Green Company AG
+            division: Product line e-mobility
+            address: "Wolfsburger Ring 2, 38440 Berlin"
+            country: DE
+            representative:
+              name: Jane Super
+              email: contact@greencompany.de
+              phone: 0049 151 1234 5678
+          dataProtectionOfficer:
+            name: Jane Super
+            address: "Wolfsburger Ring 2, 38440 Berlin"
+            country: DE
+            email: contact@greencompany.de
+            phone: 0049 151 1234 5678
+          dataDisclosed:
+          - _id: f1424f86-ca0f-4f0c-9438-43cc00509931
+            category: E-mail address
+            purposes:
+            - purpose: Marketing
+              description: Newsletter will be sent out once a month.
+            legalBases:
+            - reference: GDPR-99-1-a
+              description: The data are processed on the basis of Art. 99 GDPR which
+                states...
+            - reference: BDSG-42-5
+              description: BDSG-42-5 refers to the processing of personal data within...
+            legitimateInterests:
+            - exists: false
+              reasoning: There is an legitimate interest based on ... and is not overwritten
+                because ...
+            recipients:
+            - name: Yellow Company AG
+              division: Product line e-mobility
+              address: "Triana 123, 9999 Seville"
+              country: ES
+              representative:
+                name: Jane Super
+                email: contact@yellowcompany.de
+                phone: 0049 151 1234 9876
+              category: Marketing content provider
+            - category: Responsible Statistical Institutes
+            storage:
+            - temporal:
+              - description: Creating backups.
+                ttl: P3Y6M4DT12H30M5S
+              - description: Finishing ordering process.
+                ttl: 2020-08-09T18:31:42P3Y6M4DT12H30M17S
+              purposeConditional:
+              - Data is stored until the end of the ordering process.
+              legalBasisConditional:
+              - SGB-100-42
+              aggregationFunction: max
+            nonDisclosure:
+              legalRequirement: false
+              contractualRegulation: false
+              obligationToProvide: false
+              consequences: "If the data is not disclosed, the shipment cannot be\
+                \ delivered."
+          thirdCountryTransfers:
+          - country: ES
+            adequacyDecision:
+              available: true
+              description: An adequacy decision was made on the 23rd April 2020 by...
+            appropriateGuarantees:
+              available: true
+              description: Here the appropriate guarantee was formulated by...
+            presenceOfEnforceableRightsAndEffectiveRemedies:
+              available: true
+              description: These rights are given because of...
+            standardDataProtectionClause:
+              available: true
+              description: "The standard data protection clause which applies here\
+                \ can be found here: ..."
+          accessAndDataPortability:
+            available: true
+            description: Data access is possible through...
+            url: https://green-bikes.de/access
+            email: access@greencompany.de
+            identificationEvidences:
+            - ID card copy
+            - Email verification
+            administrativeFee:
+              amount: 0
+              currency: EUR
+            dataFormats:
+            - json
+            - xml
+          sources:
+          - _id: f1423cc00509931
+            dataCategory: Creditworthiness
+            sources:
+            - description: This information could be retrieved from...
+              url: https://blueCompany.org
+              publiclyAvailable: false
+          rightToInformation:
+            available: true
+            description: For the right to information please use this contact form
+              and...
+            url: https://greencompany.org/rightToInformation
+            email: contact@greencompany.de
+            identificationEvidences:
+            - ID card copy
+            - Email verification
+          rightToRectificationOrDeletion:
+            available: true
+            description: For the right to rectification please use this contact form
+              and...
+            url: https://greencompany.org/rights
+            email: contact@greencompany.de
+            identificationEvidences:
+            - ID card copy
+            - Email verification
+          rightToDataPortability:
+            available: false
+            description: Data portability is only possible when...
+            url: https://greencompany.org/rights
+            email: contact@greencompany.de
+            identificationEvidences:
+            - ID card copy
+          rightToWithdrawConsent:
+            available: true
+            description: For the right to withdraw consent please use this contact
+              form and...
+            url: https://greencompany.org/rights
+            email: contact@greencompany.de
+            identificationEvidences:
+            - Email verification
+          rightToComplain:
+            available: true
+            description: For the right to complain please use this contact form and...
+            url: https://greencompany.org/rights
+            email: contact@greencompany.de
+            identificationEvidences:
+            - ID card copy
+            - Email verification
+            supervisoryAuthority:
+              name: Commissioner for Data Protection
+              address: "Friedrichstrasse 219, 10969 Berlin"
+              country: DE
+              email: mailbox@privacy-berlin.de
+              phone: 0049 444 222 111
+          automatedDecisionMaking:
+            inUse: true
+            logicInvolved: The personal data are processed as follows...
+            scopeAndIntendedEffects: From processing follows...
+          changesOfPurpose:
+          - description: Due to technical requirements...
+            affectedDataCategories:
+            - Email adress
+            - Credit score
+            plannedDateOfChange: 2020-08-20
+            urlOfNewVersion: https://greencomp.de/privacypolicy/2
+    ListOfWikiEntries:
+      allOf:
+      - $ref: '#/components/schemas/AbstractList'
+      - $ref: '#/components/schemas/Wiki_Entries'
+    AbstractList:
+      properties:
+        entry_count:
+          title: Entry count
+          type: integer
+      required:
+      - entries
+      - entry_count
+      type: object
+    WikiEntry:
+      allOf:
+      - $ref: '#/components/schemas/WikiEntryHeader'
+      - $ref: '#/components/schemas/Wiki_Entry'
+      - example:
+          id: 5349b4ddd2781d08c09890f3
+      - $ref: '#/components/schemas/wikiExample'
+      - example:
+          created_at: 2022-07-01T18:04:03+0000
+          updated_at: 2022-07-01T18:04:03+0000
+    WikiEntryHeader:
+      example:
+        id: 5349b4ddd2781d08c09890f3
+        created_at: 2022-07-01T18:04:03+0000
+        updated_at: 2022-07-01T18:04:03+0000
+      properties:
+        id:
+          title: WikiEntryId
+          type: string
+        title:
+          title: Title
+          type: string
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        updated_at:
+          format: date-time
+          title: Updated At
+          type: string
+      required:
+      - title
+      title: Wiki Entry Header
+      type: object
+    wikiExample:
+      example:
+        title: Fassmodell
+        content: "# Stress\n\nStress ist ein Spannungszustand, der unseren Körper\
+          \ bereit für eine Reaktion macht.\nIn diesem Zustand...\n"
+    ListOfWikiEntryHeaders:
+      allOf:
+      - $ref: '#/components/schemas/AbstractList'
+      - $ref: '#/components/schemas/Wiki_Headers'
+    ValidationError_2:
+      properties:
+        loc:
+          items:
+            type: string
+          title: Location
+          type: array
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+      type: object
+    CreateEntryBody:
+      allOf:
+      - $ref: '#/components/schemas/Create_Entry_Request_Body'
+      - $ref: '#/components/schemas/wikiExample'
+    identity:
+      description: An identity object
+      example:
+        id: d653ee8a-b542-4c50-a570-42414dafd076
+        schema_id: user
+        schema_url: https://auth.api.live.mindtastic.lol/schemas/dXNlcg
+        state: active
+        state_changed_at: 2022-07-01T07:48:20.909705863Z
+        traits:
+          accountKey: 48275d7f-e317-23d9-60d8-0ea0f6995058
+        created_at: 2022-07-01T07:48:20.912202Z
+        updated:at: 2022-07-01T07:48:20.912202Z
+      properties:
+        id:
+          format: uuid4
+          type: string
+        schema_id:
+          description: SchemaID is the ID of the JSON Schema to be used for validating
+            the identity's traits.
+          type: string
+        schema_url:
+          description: "SchemaURL is the URL of the endpoint where the identity's\
+            \ traits schema can be fetched from.\nformat: url"
+          type: string
+        state:
+          $ref: '#/components/schemas/identityState'
+        state_changed_at:
+          format: date-time
+          title: NullTime implements sql.NullTime functionality.
+          type: string
+        traits:
+          description: "Traits represent an identity's traits. We store the account\
+            \ key here, which is the single credential for the Kopfsachen API."
+        created_at:
+          format: date-time
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+      required:
+      - id
+      - schema_id
+      - schema_url
+      - traits
+      title: Identity
+      type: object
+    identityState:
+      description: The state can either be `active` or `inactive`.
+      enum:
+      - active
+      - inactive
+      title: An Identity's State
+      type: string
+    session_1:
+      description: A session object
+      example:
+        id: 4fb42e7e-b3f1-44f7-b583-0485cda03c92
+        active: true
+        expires_at: 2022-07-02T07:48:20.921174998Z
+        authenticated_at: 2022-07-01T07:48:20.922137995Z
+        authenticator_assurance_level: aal1
+        authentication_methods:
+          type: array
+          items:
+          - method: password
+            aal: aal1
+            completed_at: 2022-07-01T07:48:20.921344603Z
+        issued_at: 2022-07-01T07:48:20.921174998Z
+        identity:
+          $ref: '#/identity/example'
+      properties:
+        id:
+          format: uuid4
+          type: string
+        active:
+          description: Active state. If false the session is no longer active.
+          type: boolean
+        expires_at:
+          description: |-
+            The Session Expiry
+            When this session expires at.
+          format: date-time
+          type: string
+        authenticated_at:
+          description: |-
+            The Session Authentication Timestamp
+            When this session was authenticated at. If multi-factor authentication was used this
+            is the time when the last factor was authenticated (e.g. the TOTP code challenge was completed).
+          format: date-time
+          type: string
+        authenticator_assurance_level:
+          description: internal value
+          enum:
+          - aal0
+          - aal1
+          - aal2
+          - aal3
+          type: string
+        authentication_methods:
+          items:
+            $ref: '#/components/schemas/sessionAuthenticationMethod'
+          type: array
+        issued_at:
+          description: |-
+            The Session Issuance Timestamp
+            When this session was issued at. Usually equal or close to `authenticated_at`.
+          format: date-time
+          type: string
+        identity:
+          $ref: '#/components/schemas/identity'
+      required:
+      - id
+      - identity
+      title: Bouncer Session
+      type: object
+    sessionAuthenticationMethod:
+      example:
+        completed_at: 2022-06-23T04:56:07.000+00:00
+        method: password
+        aal: aal1
+      properties:
+        aal:
+          description: Internal value
+          type: string
+        method:
+          enum:
+          - password
+          type: string
+        completed_at:
+          description: When the authentication challenge was completed.
+          format: date-time
+          type: string
+    bouncer_register_request:
+      example:
+        csrf_token: th93GNHtVYbGg+/l9VUzuljNDlpWWEY7R5or26pwVytdLHpyxD86+ncnUnhaYzJyMU6F1L8d9x1+9PDVgH7B/w==
+      properties:
+        csrf_token:
+          type: string
+      type: object
+    bouncer_register_400_response:
+      allOf:
+      - $ref: '#/components/schemas/jsonError'
+      - example:
+          code: 400
+          status: Bad Request
+          reason: The flow query parameter is missing or malformed
+          message: The request was malformed or contained invalid parameters
+        type: object
+    bouncer_logout_api_403_response:
+      allOf:
+      - $ref: '#/components/schemas/jsonError'
+      - example:
+          error:
+            code: 403
+            status: Forbidden
+            message: The requested action was forbidden
+            reason: "The provided Ory Session Token could not be found, is invalid,\
+              \ or otherwise malformed."
+        type: object
+    bouncer_initLogout_browser_401_response:
+      allOf:
+      - $ref: '#/components/schemas/jsonError'
+      - example:
+          error:
+            id: session_inactive
+            code: 401
+            status: Unauthorized
+            reason: No active session was found in this request.
+            message: request does not have a valid authentication session
+        type: object
+    wiki_list_200_response:
+      oneOf:
+      - $ref: '#/components/schemas/ListOfWikiEntries'
+      - $ref: '#/components/schemas/ListOfWikiEntryHeaders'
+    Motivator_1:
+      properties:
+        content:
+          items:
+            $ref: '#/components/schemas/MotivatorContent'
+          type: array
+        inputs:
+          items:
+            $ref: '#/components/schemas/MotivatorInput'
+          type: array
+      title: Motivator
+    MotivatorSliderInputElement_options:
+      description: An object that configures the range input
+      properties:
+        minValue:
+          default: 0
+          type: integer
+        maxValue:
+          default: 100
+          type: integer
+        stepSize:
+          default: 1
+          type: integer
+      type: object
+    Motivator_Result_Item_Input_Values:
+      properties:
+        value:
+          description: The actual value of the input to store. It MUST BE a valid
+            json string.
+          title: jsonValueString
+          type: string
+      required:
+      - value
+      title: Motivator Result Item Input Value
+      type: object
+    MotivatorResultCreatedResponse_allOf:
+      example: "{\"resultId\":2531}"
+      properties:
+        resultId:
+          type: integer
+      required:
+      - resultId
+    SafetyNetItem_allOf:
+      example: "{\"id\":2}"
+      properties:
+        id:
+          type: integer
+      required:
+      - id
+    schema_meta:
+      example:
+        created: created
+        _hash: _hash
+        name: name
+        modified: modified
+        language: language
+        _id: _id
+        version: 0.8008281904610115
+        url: url
+        status: status
+      properties:
+        _id:
+          minLength: 1
+          type: string
+        name:
+          minLength: 1
+          type: string
+        created:
+          minLength: 1
+          type: string
+        modified:
+          minLength: 1
+          type: string
+        version:
+          type: number
+        language:
+          minLength: 1
+          type: string
+        status:
+          minLength: 1
+          type: string
+        url:
+          minLength: 1
+          type: string
+        _hash:
+          minLength: 1
+          type: string
+      type: object
+    schema_controller_representative:
+      example:
+        phone: phone
+        name: name
+        email: email
+      properties:
+        name:
+          minLength: 1
+          type: string
+        email:
+          minLength: 1
+          type: string
+        phone:
+          minLength: 1
+          type: string
+      type: object
+    schema_controller:
+      example:
+        division: division
+        country: country
+        address: address
+        name: name
+        representative:
+          phone: phone
+          name: name
+          email: email
+      properties:
+        name:
+          minLength: 1
+          type: string
+        division:
+          minLength: 1
+          type: string
+        address:
+          minLength: 1
+          type: string
+        country:
+          minLength: 1
+          type: string
+        representative:
+          $ref: '#/components/schemas/schema_controller_representative'
+      type: object
+    schema_dataProtectionOfficer:
+      example:
+        country: country
+        address: address
+        phone: phone
+        name: name
+        email: email
+      properties:
+        name:
+          minLength: 1
+          type: string
+        address:
+          minLength: 1
+          type: string
+        country:
+          minLength: 1
+          type: string
+        email:
+          minLength: 1
+          type: string
+        phone:
+          minLength: 1
+          type: string
+      type: object
+    schema_dataDisclosed_inner_purposes_inner:
+      example:
+        purpose: purpose
+        description: description
+      properties:
+        purpose:
+          minLength: 1
+          type: string
+        description:
+          minLength: 1
+          type: string
+      type: object
+    schema_dataDisclosed_inner_legalBases_inner:
+      example:
+        reference: reference
+        description: description
+      properties:
+        reference:
+          minLength: 1
+          type: string
+        description:
+          minLength: 1
+          type: string
+      type: object
+    schema_dataDisclosed_inner_legitimateInterests_inner:
+      example:
+        reasoning: reasoning
+        exists: true
+      properties:
+        exists:
+          type: boolean
+        reasoning:
+          minLength: 1
+          type: string
+      type: object
+    schema_dataDisclosed_inner_recipients_inner_representative:
+      example:
+        phone: phone
+        name: name
+        email: email
+      properties:
+        name:
+          minLength: 1
+          type: string
+        email:
+          minLength: 1
+          type: string
+        phone:
+          minLength: 1
+          type: string
+      required:
+      - email
+      - name
+      - phone
+      type: object
+    schema_dataDisclosed_inner_recipients_inner:
+      example:
+        division: division
+        country: country
+        address: address
+        name: name
+        category: category
+        representative:
+          phone: phone
+          name: name
+          email: email
+      properties:
+        name:
+          minLength: 1
+          type: string
+        division:
+          minLength: 1
+          type: string
+        address:
+          minLength: 1
+          type: string
+        country:
+          minLength: 1
+          type: string
+        representative:
+          $ref: '#/components/schemas/schema_dataDisclosed_inner_recipients_inner_representative'
+        category:
+          minLength: 1
+          type: string
+      type: object
+    schema_dataDisclosed_inner_storage_inner_temporal_inner:
+      example:
+        description: description
+        ttl: ttl
+      properties:
+        description:
+          minLength: 1
+          type: string
+        ttl:
+          minLength: 1
+          type: string
+      required:
+      - description
+      - ttl
+      type: object
+    schema_dataDisclosed_inner_storage_inner:
+      example:
+        legalBasisConditional:
+        - "{}"
+        - "{}"
+        purposeConditional:
+        - "{}"
+        - "{}"
+        aggregationFunction: aggregationFunction
+        temporal:
+        - description: description
+          ttl: ttl
+        - description: description
+          ttl: ttl
+      properties:
+        temporal:
+          items:
+            $ref: '#/components/schemas/schema_dataDisclosed_inner_storage_inner_temporal_inner'
+          minItems: 1
+          type: array
+          uniqueItems: true
+        purposeConditional:
+          items:
+            type: object
+          type: array
+        legalBasisConditional:
+          items:
+            type: object
+          type: array
+        aggregationFunction:
+          minLength: 1
+          type: string
+      type: object
+    schema_dataDisclosed_inner_nonDisclosure:
+      example:
+        obligationToProvide: true
+        consequences: consequences
+        legalRequirement: true
+        contractualRegulation: true
+      properties:
+        legalRequirement:
+          type: boolean
+        contractualRegulation:
+          type: boolean
+        obligationToProvide:
+          type: boolean
+        consequences:
+          minLength: 1
+          type: string
+      required:
+      - consequences
+      - contractualRegulation
+      - legalRequirement
+      - obligationToProvide
+      type: object
+    schema_dataDisclosed_inner:
+      example:
+        nonDisclosure:
+          obligationToProvide: true
+          consequences: consequences
+          legalRequirement: true
+          contractualRegulation: true
+        legalBases:
+        - reference: reference
+          description: description
+        - reference: reference
+          description: description
+        purposes:
+        - purpose: purpose
+          description: description
+        - purpose: purpose
+          description: description
+        recipients:
+        - division: division
+          country: country
+          address: address
+          name: name
+          category: category
+          representative:
+            phone: phone
+            name: name
+            email: email
+        - division: division
+          country: country
+          address: address
+          name: name
+          category: category
+          representative:
+            phone: phone
+            name: name
+            email: email
+        _id: _id
+        storage:
+        - legalBasisConditional:
+          - "{}"
+          - "{}"
+          purposeConditional:
+          - "{}"
+          - "{}"
+          aggregationFunction: aggregationFunction
+          temporal:
+          - description: description
+            ttl: ttl
+          - description: description
+            ttl: ttl
+        - legalBasisConditional:
+          - "{}"
+          - "{}"
+          purposeConditional:
+          - "{}"
+          - "{}"
+          aggregationFunction: aggregationFunction
+          temporal:
+          - description: description
+            ttl: ttl
+          - description: description
+            ttl: ttl
+        category: category
+        legitimateInterests:
+        - reasoning: reasoning
+          exists: true
+        - reasoning: reasoning
+          exists: true
+      properties:
+        _id:
+          minLength: 1
+          type: string
+        category:
+          minLength: 1
+          type: string
+        purposes:
+          items:
+            $ref: '#/components/schemas/schema_dataDisclosed_inner_purposes_inner'
+          minItems: 1
+          type: array
+          uniqueItems: true
+        legalBases:
+          items:
+            $ref: '#/components/schemas/schema_dataDisclosed_inner_legalBases_inner'
+          minItems: 1
+          type: array
+          uniqueItems: true
+        legitimateInterests:
+          items:
+            $ref: '#/components/schemas/schema_dataDisclosed_inner_legitimateInterests_inner'
+          minItems: 1
+          type: array
+          uniqueItems: true
+        recipients:
+          items:
+            $ref: '#/components/schemas/schema_dataDisclosed_inner_recipients_inner'
+          minItems: 1
+          type: array
+          uniqueItems: true
+        storage:
+          items:
+            $ref: '#/components/schemas/schema_dataDisclosed_inner_storage_inner'
+          minItems: 1
+          type: array
+          uniqueItems: true
+        nonDisclosure:
+          $ref: '#/components/schemas/schema_dataDisclosed_inner_nonDisclosure'
+      type: object
+    schema_thirdCountryTransfers_inner_adequacyDecision:
+      example:
+        available: true
+        description: description
+      properties:
+        available:
+          type: boolean
+        description:
+          minLength: 1
+          type: string
+      type: object
+    schema_thirdCountryTransfers_inner:
+      example:
+        presenceOfEnforceableRightsAndEffectiveRemedies:
+          available: true
+          description: description
+        country: country
+        appropriateGuarantees:
+          available: true
+          description: description
+        standardDataProtectionClause:
+          available: true
+          description: description
+        adequacyDecision:
+          available: true
+          description: description
+      properties:
+        country:
+          minLength: 1
+          type: string
+        adequacyDecision:
+          $ref: '#/components/schemas/schema_thirdCountryTransfers_inner_adequacyDecision'
+        appropriateGuarantees:
+          $ref: '#/components/schemas/schema_thirdCountryTransfers_inner_adequacyDecision'
+        presenceOfEnforceableRightsAndEffectiveRemedies:
+          $ref: '#/components/schemas/schema_thirdCountryTransfers_inner_adequacyDecision'
+        standardDataProtectionClause:
+          $ref: '#/components/schemas/schema_thirdCountryTransfers_inner_adequacyDecision'
+      type: object
+    schema_accessAndDataPortability_administrativeFee:
+      example:
+        amount: 6.027456183070403
+        currency: currency
+      properties:
+        amount:
+          type: number
+        currency:
+          minLength: 1
+          type: string
+      type: object
+    schema_accessAndDataPortability:
+      example:
+        identificationEvidences:
+        - "{}"
+        - "{}"
+        dataFormats:
+        - "{}"
+        - "{}"
+        available: true
+        description: description
+        administrativeFee:
+          amount: 6.027456183070403
+          currency: currency
+        url: url
+        email: email
+      properties:
+        available:
+          type: boolean
+        description:
+          minLength: 1
+          type: string
+        url:
+          minLength: 1
+          type: string
+        email:
+          minLength: 1
+          type: string
+        identificationEvidences:
+          items:
+            type: object
+          type: array
+        administrativeFee:
+          $ref: '#/components/schemas/schema_accessAndDataPortability_administrativeFee'
+        dataFormats:
+          items:
+            type: object
+          type: array
+      type: object
+    schema_sources_inner_sources_inner:
+      example:
+        publiclyAvailable: true
+        description: description
+        url: url
+      properties:
+        description:
+          minLength: 1
+          type: string
+        url:
+          minLength: 1
+          type: string
+        publiclyAvailable:
+          type: boolean
+      type: object
+    schema_sources_inner:
+      example:
+        sources:
+        - publiclyAvailable: true
+          description: description
+          url: url
+        - publiclyAvailable: true
+          description: description
+          url: url
+        dataCategory: dataCategory
+        _id: _id
+      properties:
+        _id:
+          minLength: 1
+          type: string
+        dataCategory:
+          minLength: 1
+          type: string
+        sources:
+          items:
+            $ref: '#/components/schemas/schema_sources_inner_sources_inner'
+          minItems: 1
+          type: array
+          uniqueItems: true
+      type: object
+    schema_rightToInformation:
+      example:
+        identificationEvidences:
+        - "{}"
+        - "{}"
+        available: true
+        description: description
+        url: url
+        email: email
+      properties:
+        available:
+          type: boolean
+        description:
+          minLength: 1
+          type: string
+        url:
+          minLength: 1
+          type: string
+        email:
+          minLength: 1
+          type: string
+        identificationEvidences:
+          items:
+            type: object
+          type: array
+      type: object
+    schema_rightToComplain:
+      example:
+        identificationEvidences:
+        - "{}"
+        - "{}"
+        available: true
+        description: description
+        supervisoryAuthority:
+          country: country
+          address: address
+          phone: phone
+          name: name
+          email: email
+        url: url
+        email: email
+      properties:
+        available:
+          type: boolean
+        description:
+          minLength: 1
+          type: string
+        url:
+          minLength: 1
+          type: string
+        email:
+          minLength: 1
+          type: string
+        identificationEvidences:
+          items:
+            type: object
+          type: array
+        supervisoryAuthority:
+          $ref: '#/components/schemas/schema_dataProtectionOfficer'
+      type: object
+    schema_automatedDecisionMaking:
+      example:
+        logicInvolved: logicInvolved
+        scopeAndIntendedEffects: scopeAndIntendedEffects
+        inUse: true
+      properties:
+        inUse:
+          type: boolean
+        logicInvolved:
+          minLength: 1
+          type: string
+        scopeAndIntendedEffects:
+          minLength: 1
+          type: string
+      type: object
+    schema_changesOfPurpose_inner:
+      example:
+        plannedDateOfChange: plannedDateOfChange
+        urlOfNewVersion: urlOfNewVersion
+        description: description
+        affectedDataCategories:
+        - "{}"
+        - "{}"
+      properties:
+        description:
+          minLength: 1
+          type: string
+        affectedDataCategories:
+          items:
+            type: object
+          type: array
+        plannedDateOfChange:
+          minLength: 1
+          type: string
+        urlOfNewVersion:
+          minLength: 1
+          type: string
+      type: object
+    Wiki_Entries:
+      properties:
+        entries:
+          items:
+            $ref: '#/components/schemas/WikiEntry'
+          title: Entries
+          type: array
+      title: Wiki Entries
+    Wiki_Entry:
+      properties:
+        content:
+          title: Article content as MD
+          type: string
+      required:
+      - content
+      title: Wiki Entry
+    Wiki_Headers:
+      properties:
+        entries:
+          items:
+            $ref: '#/components/schemas/WikiEntryHeader'
+          title: Entries
+          type: array
+      title: Wiki Headers
+    Create_Entry_Request_Body:
+      properties:
+        title:
+          title: Title
+          type: string
+        content:
+          title: Content
+          type: string
+      title: Create Entry Request Body
+      type: object
+  securitySchemes:
+    jwt:
+      bearerFormat: JWT
+      description: "Example: \n> Authorization: Bearer <token>"
+      scheme: bearer
+      type: http
