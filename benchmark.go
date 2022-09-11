@@ -12,7 +12,7 @@ import (
 )
 
 type nf struct {
-	f    func(ctx context.Context) error
+	f    func(ctx context.Context) (int, error)
 	name string
 }
 
@@ -37,7 +37,8 @@ func (b *BenchmarkingClient) Init(ctx context.Context) {
 }
 
 func (b *BenchmarkingClient) Run(ctx context.Context) {
-	if b.token != "" {
+	if b.token == "" {
+		log.Println("no token provided")
 		return
 	}
 	ctx = context.WithValue(ctx, client.ContextAccessToken, b.token)
@@ -46,7 +47,7 @@ func (b *BenchmarkingClient) Run(ctx context.Context) {
 			b.l.Printf("shutting down: %v", err)
 			return
 		}
-
+		
 		b.run(ctx)
 		time.Sleep(time.Second)
 	}
@@ -56,10 +57,10 @@ func (b *BenchmarkingClient) run(ctx context.Context) {
 	r := rand.Intn(len(b.calls))
 	ts := time.Now()
 	nf := b.calls[r]
-	err := nf.f(ctx)
+	status, err := nf.f(ctx)
 	te := time.Now()
 	td := te.Sub(ts)
-	b.l.Printf("| %s | %d | %v", nf.name, td.Milliseconds(), err)
+	b.l.Printf("| %s | %d | %d | %v", nf.name, td.Milliseconds(), status, err)
 }
 
 func (b *BenchmarkingClient) register(ctx context.Context) {
@@ -87,51 +88,39 @@ func (b *BenchmarkingClient) register(ctx context.Context) {
 	b.token = *auth.SessionToken
 }
 
-func (b *BenchmarkingClient) mood(ctx context.Context) error {
+func (b *BenchmarkingClient) mood(ctx context.Context) (int, error) {
 	req := b.c.MoodDiaryServiceApi.DiaryMoodGetMany(ctx)
 	_, res, err := req.Execute()
 	if err != nil {
-		return fmt.Errorf("error executing mood request: %v", err)
+		return res.StatusCode, fmt.Errorf("error executing mood request: %v", err)
 	}
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("error executing mood request: %s", res.Status)
-	}
-	return nil
+	return res.StatusCode, nil
 }
 
-func (b *BenchmarkingClient) users(ctx context.Context) error {
+func (b *BenchmarkingClient) users(ctx context.Context) (int, error) {
 	req := b.c.UserServiceApi.UserDataGet(ctx)
 	_, res, err := req.Execute()
 	if err != nil {
-		return fmt.Errorf("error executing users request: %v", err)
+		return res.StatusCode, fmt.Errorf("error executing users request: %v", err)
 	}
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("error executing users request: %s", res.Status)
-	}
-	return nil
+	return res.StatusCode, nil
 }
 
-func (b *BenchmarkingClient) wiki(ctx context.Context) error {
+func (b *BenchmarkingClient) wiki(ctx context.Context) (int,error) {
 	req := b.c.WikiServiceApi.WikiList(ctx)
 	_, res, err := req.Execute()
 	if err != nil {
-		return fmt.Errorf("error executing wiki request: %v", err)
+		return res.StatusCode, fmt.Errorf("error executing wiki request: %v", err)
 	}
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("error executing wiki request: %s", res.Status)
-	}
-	return nil
+	return res.StatusCode, nil
 }
 
-func (b *BenchmarkingClient) motivation(ctx context.Context) error {
+func (b *BenchmarkingClient) motivation(ctx context.Context) (int, error) {
 	req := b.c.MotivatorServiceApi.MotivatorGet(ctx)
 	_, res, err := req.Execute()
 	if err != nil {
-		return fmt.Errorf("error executing motivator request: %v", err)
+		return res.StatusCode, fmt.Errorf("error executing motivator request: %v", err)
 
 	}
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("error executing motivator request: %s", res.Status)
-	}
-	return nil
+	return res.StatusCode, nil
 }
